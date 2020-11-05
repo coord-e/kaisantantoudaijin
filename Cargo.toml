@@ -8,5 +8,7 @@ edition = "2018"
 serenity = { version = "0.9", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "cache"] }
 tokio = { version = "0.2", features = ["full"] }
 chrono = "0.4"
+log = "0.4"
+env_logger = "0.8"
 anyhow = "1.0"
 humantime = "2.0.1"

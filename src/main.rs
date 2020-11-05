@@ -1,144 +1,156 @@
-use std::collections::VecDeque;
 use std::env;
+use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context as _, Result};
 use chrono::{FixedOffset, Utc};
+use log::{error, info};
 use serenity::{
     async_trait,
     builder::EditMember,
-    model::{channel::Message, gateway::Ready, guild::Guild, id::UserId, voice::VoiceState},
+    model::{
+        channel::Message,
+        gateway::Ready,
+        guild::Guild,
+        id::{GuildId, UserId},
+        voice::VoiceState,
+    },
     prelude::*,
 };
 use tokio::time;
 
-struct Handler;
+async fn handle(ctx: &Context, msg: &Message) -> Result<()> {
+    let channel_id = msg.channel_id;
+    let guild_id = match msg.guild_id {
+        None => bail!("not in guild"),
+        Some(id) => id,
+    };
+    let guild = match ctx.cache.guild(guild_id).await {
+        None => bail!("inaccessible guild"),
+        Some(guild) => guild,
+    };
 
-impl Handler {
-    fn schedule_after(
-        &self,
-        ctx: Context,
-        guild: Guild,
-        users: impl IntoIterator<Item = impl Into<UserId>>,
-        duration: Duration,
-    ) {
-        let now = time::Instant::now();
-        let time = now + duration;
-        let users: Vec<_> = users.into_iter().map(Into::into).collect();
-
-        tokio::spawn(async move {
-            time::delay_until(time).await;
-
-            for user_id in users {
-                println!("disconnect {:?}", user_id);
-                guild
-                    .edit_member(&ctx.http, user_id, EditMember::disconnect_member)
-                    .await
-                    .expect("wtf");
+    if let Some(content) = msg.content.strip_prefix("!kaisan ") {
+        let args: Vec<_> = content.splitn(3, ' ').collect();
+        let target_users = match args.first().copied() {
+            Some("me") => vec![msg.author.id],
+            Some("all") => same_channel_users(&guild, msg.author.id)?,
+            _ => {
+                channel_id.say(&ctx.http, "わからん: me か all").await?;
+                return Ok(());
             }
-        });
-    }
-
-    fn target_users(&self, guild: &Guild, user_id: UserId) -> Result<Vec<UserId>> {
-        let channel_id = match guild.voice_states.get(&user_id) {
-            None
-            | Some(VoiceState {
-                channel_id: None, ..
-            }) => bail!("wtf"),
-            Some(VoiceState {
-                channel_id: Some(id),
-                ..
-            }) => id,
         };
 
-        let mut target_users = Vec::new();
-        for (user_id, state) in &guild.voice_states {
-            if state.channel_id == Some(*channel_id) {
-                target_users.push(user_id.clone());
-            }
-        }
+        let duration = match args.as_slice() {
+            &[_, "at", time] => {
+                let offset = Duration::from_secs(9 * 3600);
+                let time = humantime::parse_rfc3339_weak(time)? - offset;
+                let duration = time.duration_since(SystemTime::now())?;
 
-        Ok(target_users)
+                channel_id
+                    .say(
+                        &ctx.http,
+                        format!("はい ({} 後)", humantime::format_duration(duration)),
+                    )
+                    .await?;
+
+                duration
+            }
+            &[_, "after", duration] => {
+                let duration = humantime::parse_duration(duration)?;
+
+                let jst = FixedOffset::east(9 * 3600);
+                let time = Utc::now() + chrono::Duration::from_std(duration)?;
+                channel_id
+                    .say(&ctx.http, format!("はい ({})", time.with_timezone(&jst)))
+                    .await?;
+
+                duration
+            }
+            _ => {
+                channel_id.say(&ctx.http, "わからん: at か after").await?;
+                return Ok(());
+            }
+        };
+
+        schedule_after(ctx, guild, target_users, duration);
     }
 
-    async fn handle(&self, ctx: Context, msg: Message) -> Result<()> {
-        let guild_id = match msg.guild_id {
-            None => bail!("non-guild context"),
-            Some(id) => id,
-        };
-        let guild = match ctx.cache.guild(guild_id).await {
-            None => bail!("non-guild context"),
-            Some(guild) => guild,
-        };
-
-        if let Some(content) = msg.content.strip_prefix("!kaisan") {
-            let mut args: VecDeque<_> = content.trim().splitn(3, ' ').collect();
-            let target_users = match args.pop_front() {
-                Some("me") => vec![msg.author.id],
-                Some("all") => self.target_users(&guild, msg.author.id)?,
-                _ => bail!("wtf"),
-            };
-
-            match (args.get(0).copied(), args.get(1)) {
-                (Some("at"), Some(time)) => {
-                    let offset = Duration::from_secs(9 * 3600);
-                    let time = humantime::parse_rfc3339_weak(time)? - offset;
-                    let now = SystemTime::now();
-
-                    let jst = FixedOffset::east(9 * 3600);
-                    let display_time = chrono::DateTime::<Utc>::from(time).with_timezone(&jst);
-                    println!("register kaisamne {:?}", display_time);
-                    msg.channel_id
-                        .say(&ctx.http, format!("はい: {:?}", display_time))
-                        .await?;
-
-                    self.schedule_after(ctx, guild, target_users, time.duration_since(now)?);
-                }
-                (Some("after"), Some(duration)) => {
-                    let duration = humantime::parse_duration(duration)?;
-
-                    let jst = FixedOffset::east(9 * 3600);
-                    let display_time =
-                        (Utc::now() + chrono::Duration::from_std(duration)?).with_timezone(&jst);
-                    println!("register kaisamne {:?}", display_time);
-                    msg.channel_id
-                        .say(&ctx.http, format!("はい: {:?}", display_time))
-                        .await?;
-
-                    self.schedule_after(ctx, guild, target_users, duration);
-                }
-                _ => {
-                    msg.channel_id.say(&ctx.http, "わからん").await?;
-                }
-            }
-        }
-        Ok(())
-    }
+    Ok(())
 }
+
+fn schedule_after(
+    ctx: &Context,
+    guild: impl Into<GuildId>,
+    users: impl IntoIterator<Item = impl Into<UserId>>,
+    duration: Duration,
+) {
+    let users: Vec<_> = users.into_iter().map(Into::into).collect();
+    let guild_id = guild.into();
+    let http = Arc::clone(&ctx.http);
+
+    tokio::spawn(async move {
+        time::delay_for(duration).await;
+
+        for user_id in users {
+            info!("disconnect {:?}", user_id);
+            guild_id
+                .edit_member(&http, user_id, EditMember::disconnect_member)
+                .await
+                .expect("wtf");
+        }
+    });
+}
+
+fn same_channel_users(guild: &Guild, user_id: UserId) -> Result<Vec<UserId>> {
+    let channel_id = match guild.voice_states.get(&user_id) {
+        Some(VoiceState {
+            channel_id: Some(id),
+            ..
+        }) => id,
+        _ => bail!("not in voice channel"),
+    };
+
+    let mut target_users = Vec::new();
+    for (user_id, state) in &guild.voice_states {
+        if state.channel_id == Some(*channel_id) {
+            target_users.push(user_id.clone());
+        }
+    }
+
+    Ok(target_users)
+}
+
+struct Handler;
 
 #[async_trait]
 impl EventHandler for Handler {
     async fn message(&self, ctx: Context, msg: Message) {
-        if let Err(e) = self.handle(ctx, msg).await {
-            println!("Error sending message: {}", e);
+        if msg.author.bot {
+            return;
+        }
+
+        if let Err(e) = handle(&ctx, &msg).await {
+            let _ = msg.channel_id.say(&ctx.http, "ダメそう").await;
+            error!("Error in handler: {}", e);
         }
     }
 
     async fn ready(&self, _: Context, ready: Ready) {
-        println!("{} is connected!", ready.user.name);
+        info!("{} is connected!", ready.user.name);
     }
 }
 
 #[tokio::main]
-async fn main() {
-    let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
+async fn main() -> Result<()> {
+    env_logger::try_init()?;
+
+    let token = env::var("DISCORD_TOKEN").context("DISCORD_TOKEN is not set")?;
 
     let mut client = Client::builder(&token)
         .event_handler(Handler)
         .await
-        .expect("Err creating client");
+        .context("Failed to create client")?;
 
-    if let Err(why) = client.start().await {
-        println!("Client error: {:?}", why);
-    }
+    client.start().await.context("Client error")
 }
