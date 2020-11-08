@@ -56,6 +56,7 @@ impl EventHandler for Handler {
 
 #[derive(StructOpt)]
 #[structopt(group = ArgGroup::with_name("tokens").required(true).multiple(false))]
+/// You may want to set "KAISANDAIJIN_LOG" "KAISANDAIJIN_LOG_STYLE" to configure logger.
 struct Opt {
     #[structopt(
         long,
@@ -89,7 +90,10 @@ async fn main() -> Result<()> {
     };
     let token = token.trim();
 
-    env_logger::try_init()?;
+    let env = env_logger::Env::new()
+        .filter("KAISANDAIJIN_LOG")
+        .write_style("KAISANDAIJIN_LOG_STYLE");
+    env_logger::try_init_from_env(env)?;
 
     let mut client = Client::builder(token)
         .event_handler(Handler {
