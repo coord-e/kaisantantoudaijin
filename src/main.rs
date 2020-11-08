@@ -4,18 +4,19 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
-use chrono_tz::Tz;
+use futures::lock::Mutex;
 use log::error;
 use serenity::client::{Client, EventHandler};
 use structopt::{clap::ArgGroup, StructOpt};
 
 use kaisantantoudaijin::{
-    context::{ChannelContext, Config, Context},
+    context::{ChannelContext, Context},
     model::message::Message,
 };
 
 struct Handler {
-    config: Config,
+    redis_prefix: String,
+    redis: Arc<Mutex<redis::aio::Connection>>,
 }
 
 #[async_trait::async_trait]
@@ -32,7 +33,8 @@ impl EventHandler for Handler {
         let ctx = match Context::new(
             Arc::clone(&ctx.http),
             Arc::clone(&ctx.cache),
-            self.config.clone(),
+            self.redis_prefix.clone(),
+            Arc::clone(&self.redis),
             &msg,
         )
         .await
@@ -72,20 +74,23 @@ struct Opt {
         group = "tokens"
     )]
     token_file: Option<PathBuf>,
-    #[structopt(short, long, env = "KAISANDAIJIN_TIMEZONE")]
-    timezone: Tz,
-    #[structopt(short, long)]
-    requires_permission: bool,
+    #[structopt(short, long, env = "KAISANDAIJIN_REDIS_URI")]
+    redis_uri: String,
+    #[structopt(
+        short = "p",
+        long,
+        default_value = "kaisandaijin",
+        env = "KAISANDAIJIN_REDIS_PREFIX"
+    )]
+    redis_prefix: String,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let opt = Opt::from_args();
 
-    let config = Config {
-        timezone: opt.timezone,
-        requires_permission: opt.requires_permission,
-    };
+    let redis_client = redis::Client::open(opt.redis_uri)?;
+    let redis_conn = Arc::new(Mutex::new(redis_client.get_async_connection().await?));
 
     let token = if let Some(token) = opt.token {
         token
@@ -103,7 +108,10 @@ async fn main() -> Result<()> {
     env_logger::try_init_from_env(env)?;
 
     let mut client = Client::builder(token)
-        .event_handler(Handler { config })
+        .event_handler(Handler {
+            redis_prefix: opt.redis_prefix,
+            redis: redis_conn,
+        })
         .await
         .context("Failed to create client")?;
 

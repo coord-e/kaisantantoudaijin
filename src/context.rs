@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::error::{Error, Result};
 use crate::model::command::Command;
-use crate::use_case::{Help, ScheduleKaisan};
+use crate::use_case;
 
 use anyhow::Context as _;
 use chrono::{DateTime, Utc};
@@ -11,6 +11,7 @@ use chrono_tz::Tz;
 use futures::lock::Mutex;
 use log::{debug, info};
 use rand::{rngs::SmallRng, Rng, SeedableRng};
+use redis::{AsyncCommands, FromRedisValue, ToRedisArgs};
 use serenity::{
     builder::EditMember,
     cache::Cache,
@@ -25,25 +26,19 @@ use serenity::{
 
 mod bot;
 mod channel;
-mod config;
 mod guild;
 mod message;
 mod random;
+mod setting;
 mod time;
 
 pub use bot::BotContext;
 pub use channel::ChannelContext;
-pub use config::ConfigContext;
 pub use guild::GuildContext;
 pub use message::MessageContext;
 pub use random::RandomContext;
+pub use setting::SettingContext;
 pub use time::TimeContext;
-
-#[derive(Clone, Debug)]
-pub struct Config {
-    pub timezone: Tz,
-    pub requires_permission: bool,
-}
 
 #[derive(Clone)]
 pub struct Context {
@@ -54,7 +49,8 @@ pub struct Context {
     author_id: UserId,
     channel_id: ChannelId,
     message_id: MessageId,
-    config: Config,
+    redis_prefix: String,
+    redis: Arc<Mutex<redis::aio::Connection>>,
     rng: Arc<Mutex<SmallRng>>,
 }
 
@@ -68,6 +64,31 @@ impl Context {
             None => Err(Error::InaccessibleGuild),
             Some(x) => Ok(x),
         }
+    }
+
+    fn redis_key(&self, key: &str) -> String {
+        format!("{}:{}:{}", self.redis_prefix, self.guild_id.as_u64(), key)
+    }
+
+    async fn redis_get<T: FromRedisValue>(&self, key: &str) -> Result<Option<T>> {
+        let r = self
+            .redis
+            .lock()
+            .await
+            .get(self.redis_key(key))
+            .await
+            .context("cannot read from redis")?;
+        Ok(r)
+    }
+
+    async fn redis_set<T: ToRedisArgs + Send + Sync>(&self, key: &str, value: T) -> Result<()> {
+        self.redis
+            .lock()
+            .await
+            .set(self.redis_key(key), value)
+            .await
+            .context("cannot write to redis")?;
+        Ok(())
     }
 }
 
@@ -170,13 +191,28 @@ impl TimeContext for Context {
 }
 
 #[async_trait::async_trait]
-impl ConfigContext for Context {
-    fn timezone(&self) -> Tz {
-        self.config.timezone
+impl SettingContext for Context {
+    async fn set_timezone(&self, timezone: Tz) -> Result<()> {
+        self.redis_set("timezone", timezone.name()).await
     }
 
-    fn requires_permission(&self) -> bool {
-        self.config.requires_permission
+    async fn timezone(&self) -> Result<Tz> {
+        Ok(match self.redis_get::<String>("timezone").await? {
+            None => chrono_tz::Japan,
+            Some(tz_str) => tz_str.parse().unwrap(),
+        })
+    }
+
+    async fn set_requires_permission(&self, requires_permission: bool) -> Result<()> {
+        self.redis_set("requires_permission", requires_permission as u32)
+            .await
+    }
+
+    async fn requires_permission(&self) -> Result<bool> {
+        Ok(match self.redis_get::<u32>("requires_permission").await? {
+            None => true,
+            Some(r) => r != 0,
+        })
     }
 }
 
@@ -184,7 +220,8 @@ impl Context {
     pub async fn new(
         http: Arc<Http>,
         cache: Arc<Cache>,
-        config: Config,
+        redis_prefix: String,
+        redis: Arc<Mutex<redis::aio::Connection>>,
         message: &Message,
     ) -> Option<Context> {
         let bot_id = cache.current_user_id().await;
@@ -202,7 +239,8 @@ impl Context {
             author_id: message.author.id,
             channel_id: message.channel_id,
             message_id: message.id,
-            config,
+            redis_prefix,
+            redis,
             rng: Arc::new(Mutex::new(SmallRng::from_entropy())),
         })
     }
@@ -227,11 +265,16 @@ impl Context {
         debug!("parsed message as command: {:?}", command);
 
         match command {
-            Command::Help => self.help().await,
+            Command::Help => use_case::Help::help(self).await,
+            Command::ShowSetting => use_case::ShowSetting::show_setting(self).await,
+            Command::TimeZone(tz) => use_case::SetTimeZone::set_timezone(self, tz).await,
+            Command::RequirePermission(b) => {
+                use_case::SetRequiresPermission::set_requires_permission(self, b).await
+            }
             Command::Kaisan {
                 kaisanee,
                 time_range,
-            } => self.schedule_kaisan(kaisanee, time_range).await,
+            } => use_case::ScheduleKaisan::schedule_kaisan(self, kaisanee, time_range).await,
         }
     }
 }

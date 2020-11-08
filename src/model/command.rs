@@ -3,6 +3,7 @@ use std::fmt::{self, Display};
 use std::str::FromStr;
 
 use chrono::DateTime;
+use chrono_tz::Tz;
 use serenity::model::id::UserId;
 
 use crate::model::{
@@ -22,6 +23,9 @@ pub enum Command {
         kaisanee: KaisaneeSpecifier,
         time_range: TimeRangeSpecifier,
     },
+    ShowSetting,
+    TimeZone(Tz),
+    RequirePermission(bool),
     Help,
 }
 
@@ -120,6 +124,16 @@ peg::parser! {
           x:$(['0'..='9']*<1,3>) {? x.parse().map_err(|_| "0~255") }
           / kanji_number()
       } / expected!("number")
+
+    rule boolean() -> bool
+      = quiet! {
+          "true" { true }
+          / "false" { false }
+          / "yes" { true }
+          / "no" { false }
+          / "はい" { true }
+          / "いいえ" { false }
+      } / expected!("boolean")
 
     rule minute() -> Minute
       = n:(
@@ -236,6 +250,14 @@ peg::parser! {
 
     pub rule command() -> Command
       = "help" { Command::Help }
+      / "require-permission" _ b:boolean() { Command::RequirePermission(b) }
+      / "timezone" _ tz:$(['a'..='z' | 'A'..='Z' | '0'..='9' | '+' | '-' | '/' ]+) {?
+          match tz.parse() {
+              Ok(tz) => Ok(Command::TimeZone(tz)),
+              Err(_) => Err("timezone")
+          }
+      }
+      / "show-setting" { Command::ShowSetting }
       / kaisanee1:spec_kaisanee()? time_range:time_range() _ (['に'] _)? kaisanee2:spec_kaisanee()? "解散"? {?
           match (kaisanee1, kaisanee2) {
               (Some(kaisanee), None) | (None, Some(kaisanee)) => Ok(Command::Kaisan { kaisanee, time_range }),

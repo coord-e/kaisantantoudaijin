@@ -1,5 +1,5 @@
 use crate::context::{
-    ChannelContext, ConfigContext, GuildContext, MessageContext, RandomContext, TimeContext,
+    ChannelContext, GuildContext, MessageContext, RandomContext, SettingContext, TimeContext,
 };
 use crate::error::{Error, Result};
 use crate::model::{
@@ -20,7 +20,7 @@ pub trait ScheduleKaisan:
     GuildContext
     + ChannelContext
     + MessageContext
-    + ConfigContext
+    + SettingContext
     + TimeContext
     + RandomContext
     + Clone
@@ -35,7 +35,7 @@ pub trait ScheduleKaisan:
         let author_id = self.author_id();
 
         if kaisanee.may_include_others(author_id)
-            && self.requires_permission()
+            && self.requires_permission().await?
             && !self.member_permissions(author_id).await?.move_members()
         {
             return Err(Error::InsufficientPermission(Permissions::MOVE_MEMBERS));
@@ -47,7 +47,7 @@ pub trait ScheduleKaisan:
         };
 
         let now = self.current_time();
-        let tz = self.timezone();
+        let tz = self.timezone().await?;
         let time = match time_range {
             TimeRangeSpecifier::At(spec) => {
                 let time = calculate_time(spec, now, tz);
@@ -100,7 +100,7 @@ impl<
         T: GuildContext
             + ChannelContext
             + MessageContext
-            + ConfigContext
+            + SettingContext
             + TimeContext
             + RandomContext
             + Clone

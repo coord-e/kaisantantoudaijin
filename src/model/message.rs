@@ -12,6 +12,10 @@ pub enum Message {
     ScheduledAt(KaisaneeSpecifier, DateTime<Tz>),
     ScheduledBy(KaisaneeSpecifier, DateTime<Tz>),
     Kaisan(Vec<UserId>),
+    Setting {
+        requires_permission: bool,
+        timezone: Tz,
+    },
     HandleError(Error),
     KaisanError(Error),
 }
@@ -22,11 +26,25 @@ impl Display for Message {
             Message::Help => f.write_str(
                 "メンションか `!kaisan` でコマンドが実行できます。
 
-**コマンド例**
-- `@解散担当大臣 1時間30分後`
-- `!kaisan me after 10min`
-- `明日の一時 @解散担当大臣`
-- `!kaisan @someone at 10:30`
+・`!kaisan help`: ヘルプ
+
+**解散コマンド** 省略された場合、`TARGET` は全員になります
+・`!kaisan [TARGET] at TIME`: `TARGET` を `TIME` に解散する
+・`!kaisan [TARGET] after DURATION`: `TARGET` を `DURATION` 後に解散する
+・`!kaisan [TARGET] by TIME`: `TARGET` を `TIME` までのランダムな時間に解散する
+・`!kaisan [TARGET] within DURATION`: `TARGET` を `DURATION` 後までのランダムな時間に解散する
+・その他さまざまな糖衣構文
+
+*解散コマンド例*
+・`@解散担当大臣 1時間30分後`
+・`!kaisan me after 10min`
+・`明日の一時 @解散担当大臣`
+・`!kaisan @someone at 10:30`
+
+**設定コマンド** 設定には Manage Guild 権限が必要です
+・`!kaisan show-setting`: 設定表示
+・`!kaisan timezone TIMEZONE`: タイムゾーンを設定
+・`!kaisan require-permission BOOLEAN`: 他人を解散するのに Move Members 権限を必要とするか設定
 ",
             ),
             Message::ScheduledAt(kaisanee, time) => {
@@ -44,6 +62,22 @@ impl Display for Message {
                     write!(f, "{} ", id.mention())?;
                 }
                 f.write_str("解散！")
+            }
+            Message::Setting {
+                requires_permission,
+                timezone,
+            } => {
+                writeln!(
+                    f,
+                    "他人を解散させるのに権限を必要とする: {}",
+                    if *requires_permission {
+                        "はい"
+                    } else {
+                        "いいえ"
+                    }
+                )?;
+                writeln!(f, "タイムゾーン: {}", timezone.name())?;
+                Ok(())
             }
             Message::HandleError(e) => fmt_error(f, e),
             Message::KaisanError(e) => {
