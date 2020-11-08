@@ -6,14 +6,14 @@ edition = "2018"
 
 [dependencies]
 serenity = { version = "0.9", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "cache"] }
-tokio = { version = "0.2", features = ["full"] }
+tokio = { version = "0.2", default-features = false, features = ["macros", "rt-threaded", "time"] }
 chrono = "0.4"
 chrono-tz = "0.4"
 structopt = "0.3"
 log = "0.4"
 env_logger = "0.8"
 anyhow = "1.0"
-thiserror = "1"
+thiserror = "1.0"
 rand = { version = "0.7", features = ["small_rng"] }
 futures = "0.3"
 peg = "0.6"
