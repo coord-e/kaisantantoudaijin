@@ -10,12 +10,12 @@ use serenity::client::{Client, EventHandler};
 use structopt::{clap::ArgGroup, StructOpt};
 
 use kaisantantoudaijin::{
-    context::{ChannelContext, Context},
+    context::{ChannelContext, Config, Context},
     model::message::Message,
 };
 
 struct Handler {
-    timezone: Tz,
+    config: Config,
 }
 
 #[async_trait::async_trait]
@@ -32,7 +32,7 @@ impl EventHandler for Handler {
         let ctx = match Context::new(
             Arc::clone(&ctx.http),
             Arc::clone(&ctx.cache),
-            self.timezone,
+            self.config.clone(),
             &msg,
         )
         .await
@@ -74,11 +74,18 @@ struct Opt {
     token_file: Option<PathBuf>,
     #[structopt(short, long, env = "KAISANDAIJIN_TIMEZONE")]
     timezone: Tz,
+    #[structopt(short, long)]
+    requires_permission: bool,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let opt = Opt::from_args();
+
+    let config = Config {
+        timezone: opt.timezone,
+        requires_permission: opt.requires_permission,
+    };
 
     let token = if let Some(token) = opt.token {
         token
@@ -96,9 +103,7 @@ async fn main() -> Result<()> {
     env_logger::try_init_from_env(env)?;
 
     let mut client = Client::builder(token)
-        .event_handler(Handler {
-            timezone: opt.timezone,
-        })
+        .event_handler(Handler { config })
         .await
         .context("Failed to create client")?;
 

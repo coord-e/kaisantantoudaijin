@@ -9,7 +9,10 @@ use crate::model::{
 
 use chrono::{DateTime, Duration, Utc};
 use log::{error, info};
-use serenity::model::id::{ChannelId, UserId};
+use serenity::model::{
+    id::{ChannelId, UserId},
+    permissions::Permissions,
+};
 use tokio::{spawn, time};
 
 #[async_trait::async_trait]
@@ -30,6 +33,14 @@ pub trait ScheduleKaisan:
         time_range: TimeRangeSpecifier,
     ) -> Result<()> {
         let author_id = self.author_id();
+
+        if kaisanee.may_include_others(author_id)
+            && self.requires_permission()
+            && !self.member_permissions(author_id).await?.move_members()
+        {
+            return Err(Error::InsufficientPermission(Permissions::MOVE_MEMBERS));
+        }
+
         let voice_channel_id = match self.connected_voice_channel(author_id).await? {
             Some(id) => id,
             None => return Err(Error::NotInVoiceChannel),

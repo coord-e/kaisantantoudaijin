@@ -9,6 +9,16 @@ pub enum KaisaneeSpecifier {
     Users(Vec<UserId>),
 }
 
+impl KaisaneeSpecifier {
+    pub fn may_include_others(&self, user_id: UserId) -> bool {
+        match self {
+            KaisaneeSpecifier::Me => false,
+            KaisaneeSpecifier::All => true,
+            KaisaneeSpecifier::Users(users) => users != &[user_id],
+        }
+    }
+}
+
 impl Default for KaisaneeSpecifier {
     fn default() -> Self {
         KaisaneeSpecifier::All

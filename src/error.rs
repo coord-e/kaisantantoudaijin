@@ -1,6 +1,7 @@
 use crate::model::command::ParseCommandError;
 
 use chrono::{DateTime, Utc};
+use serenity::model::permissions::Permissions;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -11,6 +12,8 @@ pub enum Error {
     NotInVoiceChannel,
     #[error("unable to parse command")]
     InvalidCommand(#[from] ParseCommandError),
+    #[error("you don't have {0} permission")]
+    InsufficientPermission(Permissions),
     #[error("unreachable time {specified} has specified at {at}")]
     UnreachableTime {
         specified: DateTime<Utc>,

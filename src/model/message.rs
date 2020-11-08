@@ -59,6 +59,7 @@ fn fmt_error(f: &mut fmt::Formatter, e: &Error) -> fmt::Result {
         Error::NotInVoiceChannel => f.write_str("ボイスチャンネルに入った状態で使ってほしい"),
         Error::InvalidCommand(_) => f.write_str("コマンドがわからない"),
         Error::UnreachableTime { .. } => f.write_str("過去を変えることはできない"),
+        Error::InsufficientPermission(p) => write!(f, "{} の権限が必要です", p),
         _ => f.write_str("ダメそう"),
     }
 }

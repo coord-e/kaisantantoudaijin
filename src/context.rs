@@ -18,6 +18,7 @@ use serenity::{
     model::{
         channel::{Message, ReactionType},
         id::{ChannelId, GuildId, MessageId, UserId},
+        permissions::Permissions,
         voice::VoiceState,
     },
 };
@@ -38,6 +39,12 @@ pub use message::MessageContext;
 pub use random::RandomContext;
 pub use time::TimeContext;
 
+#[derive(Clone, Debug)]
+pub struct Config {
+    pub timezone: Tz,
+    pub requires_permission: bool,
+}
+
 #[derive(Clone)]
 pub struct Context {
     http: Arc<Http>,
@@ -47,7 +54,7 @@ pub struct Context {
     author_id: UserId,
     channel_id: ChannelId,
     message_id: MessageId,
-    timezone: Tz,
+    config: Config,
     rng: Arc<Mutex<SmallRng>>,
 }
 
@@ -72,6 +79,17 @@ impl BotContext for Context {
 
 #[async_trait::async_trait]
 impl GuildContext for Context {
+    async fn member_permissions(&self, user_id: UserId) -> Result<Permissions> {
+        match self
+            .cache
+            .guild_field(self.guild_id, |g| g.member_permissions(user_id))
+            .await
+        {
+            None => Err(Error::InaccessibleGuild),
+            Some(x) => Ok(x),
+        }
+    }
+
     async fn connected_voice_channel(&self, user_id: UserId) -> Result<Option<ChannelId>> {
         let voice_states = self.voice_states().await?;
 
@@ -154,7 +172,11 @@ impl TimeContext for Context {
 #[async_trait::async_trait]
 impl ConfigContext for Context {
     fn timezone(&self) -> Tz {
-        self.timezone
+        self.config.timezone
+    }
+
+    fn requires_permission(&self) -> bool {
+        self.config.requires_permission
     }
 }
 
@@ -162,7 +184,7 @@ impl Context {
     pub async fn new(
         http: Arc<Http>,
         cache: Arc<Cache>,
-        timezone: Tz,
+        config: Config,
         message: &Message,
     ) -> Option<Context> {
         let bot_id = cache.current_user_id().await;
@@ -180,7 +202,7 @@ impl Context {
             author_id: message.author.id,
             channel_id: message.channel_id,
             message_id: message.id,
-            timezone,
+            config,
             rng: Arc::new(Mutex::new(SmallRng::from_entropy())),
         })
     }
