@@ -1,83 +1,14 @@
+use std::error::Error;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use chrono::{DateTime, FixedOffset};
+use chrono::DateTime;
 use serenity::model::id::UserId;
 
-#[derive(Debug, Clone)]
-pub enum KaisaneeSpecifier {
-    Me,
-    All,
-    Users(Vec<UserId>),
-}
-
-impl Default for KaisaneeSpecifier {
-    fn default() -> Self {
-        KaisaneeSpecifier::All
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Copy)]
-pub struct Hour(u8);
-
-impl Hour {
-    // implemented to use in parser
-    fn from_u8(x: u8) -> Result<Hour, &'static str> {
-        if x < 24 {
-            Ok(Hour(x))
-        } else {
-            Err("invalid hour")
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Copy)]
-pub struct Minute(u8);
-
-impl Minute {
-    // implemented to use in parser
-    fn from_u8(x: u8) -> Result<Minute, &'static str> {
-        if x < 60 {
-            Ok(Minute(x))
-        } else {
-            Err("invalid minute")
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum HourMinuteSpecifier<H, M> {
-    Hour(H),
-    Minute(M),
-    Both(H, M),
-}
-
-impl<H, M> HourMinuteSpecifier<H, M> {
-    pub fn with_hour(h: H, m: Option<M>) -> HourMinuteSpecifier<H, M> {
-        match m {
-            Some(m) => HourMinuteSpecifier::Both(h, m),
-            None => HourMinuteSpecifier::Hour(h),
-        }
-    }
-
-    pub fn with_minute(m: M, h: Option<H>) -> HourMinuteSpecifier<H, M> {
-        match h {
-            Some(h) => HourMinuteSpecifier::Both(h, m),
-            None => HourMinuteSpecifier::Minute(m),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum TimeSpecifier {
-    Now,
-    After(HourMinuteSpecifier<u8, u8>),
-    At {
-        time: HourMinuteSpecifier<Hour, Minute>,
-        is_tomorrow: bool,
-    },
-    Exactly(DateTime<FixedOffset>),
-}
+use crate::model::{
+    kaisanee::KaisaneeSpecifier,
+    time::{Hour, HourMinuteSpecifier, Minute, TimeSpecifier},
+};
 
 #[derive(Debug, Clone, Copy)]
 pub enum TimeRangeSpecifier {
@@ -109,6 +40,8 @@ impl Display for ParseCommandError {
         Ok(())
     }
 }
+
+impl Error for ParseCommandError {}
 
 impl FromStr for Command {
     type Err = ParseCommandError;
@@ -181,15 +114,19 @@ peg::parser! {
       / kanji_number()
 
     rule minute() -> Minute
-      = t:$(['0'..='9']*<1,2>) {? Minute::from_u8(t.parse().unwrap()) }
-      / n:kanji_number() {? Minute::from_u8(n) }
+      = n:(
+          t:$(['0'..='9']*<1,2>) { t.parse().unwrap() }
+          / kanji_number()
+      ) {? Minute::from_u8(n).map_err(|_| "invalid minute") }
 
     rule hour() -> Hour
-      = t:$(['0'..='9']*<1,2>) {? Hour::from_u8(t.parse().unwrap()) }
-      / n:kanji_number() {? Hour::from_u8(n) }
+      = n:(
+          t:$(['0'..='9']*<1,2>) { t.parse().unwrap() }
+          / kanji_number()
+      ) {? Hour::from_u8(n).map_err(|_| "invalid hour") }
 
     rule spec_minute() -> Minute
-      = ['半'] _ { Minute(30) }
+      = ['半'] _ { Minute::from_u8(30).unwrap() }
       / m:minute() _ ['分'] _ { m }
 
     rule spec_at_tomorrow() -> TimeSpecifier
@@ -213,7 +150,7 @@ peg::parser! {
                   time: HourMinuteSpecifier::Both(h, m),
                   is_tomorrow: t.is_some(),
               }
-          })
+          }).map_err(|_| "invalid hour")
       }
       / _ ['分'] _ {?
           Minute::from_u8(x).map(|m| {
@@ -221,7 +158,7 @@ peg::parser! {
                   time: HourMinuteSpecifier::with_minute(m, None),
                   is_tomorrow: false
               }
-          })
+          }).map_err(|_| "invalid minute")
       }
       / _ ['時'] _ m:spec_minute()? {?
           Hour::from_u8(x).map(|h| {
@@ -229,11 +166,11 @@ peg::parser! {
                   time: HourMinuteSpecifier::with_hour(h, m),
                   is_tomorrow: false
               }
-          })
+          }).map_err(|_| "invalid hour")
       }
 
     rule spec_at_half() -> TimeSpecifier
-      = ['半'] _ { TimeSpecifier::At { time: HourMinuteSpecifier::Minute(Minute(30)), is_tomorrow: false } }
+      = ['半'] _ { TimeSpecifier::At { time: HourMinuteSpecifier::Minute(Minute::from_u8(30).unwrap()), is_tomorrow: false } }
 
     rule spec_at() -> TimeSpecifier
       = x:number() spec:spec_at_tail(x) { spec }
@@ -300,8 +237,3 @@ peg::parser! {
       }
   }
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use super::{parser, Command};
-// }
