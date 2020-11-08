@@ -56,22 +56,26 @@ impl FromStr for Command {
 
 peg::parser! {
   grammar parser() for str {
-    rule _() = [' ']*
+    rule _() = quiet! { [' ']* }
 
     rule me()
-      = "me" / "Me"
-      / "私" / "わたし"
-      / "俺" / "おれ" / "オレ"
-      / "僕" / "ぼく" / "ボク"
+      = quiet! {
+          "me" / "Me"
+          / "私" / "わたし"
+          / "俺" / "おれ" / "オレ"
+          / "僕" / "ぼく" / "ボク"
+      } / expected!("me")
 
     rule all()
-      = "all" / "All" / "全員" / "皆" / "みんな"
+      = quiet! {
+          "all" / "All" / "全員" / "皆" / "みんな"
+      } / expected!("all")
 
     rule user() -> UserId
       = "<@!" n:$(['0'..='9']+) ">" { UserId(n.parse().unwrap()) }
 
     rule users() -> Vec<UserId>
-      = l:user() ** _ {? if l.is_empty() { Err("invalid empty users") } else { Ok(l) } }
+      = l:user() ** _ {? if l.is_empty() { Err("non-empty list of empty users") } else { Ok(l) } }
 
     pub rule kaisanee() -> KaisaneeSpecifier
       = me() { KaisaneeSpecifier::Me }
@@ -101,29 +105,33 @@ peg::parser! {
           if d < Some(100) {
               Ok(x * 100 + d.unwrap_or(0))
           } else {
-              Err("invalid kanji number")
+              Err("kanji number")
           }
       }
 
     rule kanji_number() -> u8
-      = kanji_number_tail(1)
-      / x:kanji_number_digit() y:kanji_number_tail(x)? { y.unwrap_or(x) }
+      = quiet! {
+          kanji_number_tail(1)
+          / x:kanji_number_digit() y:kanji_number_tail(x)? { y.unwrap_or(x) }
+        } / expected!("kanji number")
 
     rule number() -> u8
-      = x:$(['0'..='9']*<1,3>) {? x.parse().map_err(|_| "0~255") }
-      / kanji_number()
+      = quiet! {
+          x:$(['0'..='9']*<1,3>) {? x.parse().map_err(|_| "0~255") }
+          / kanji_number()
+      } / expected!("number")
 
     rule minute() -> Minute
       = n:(
           t:$(['0'..='9']*<1,2>) { t.parse().unwrap() }
           / kanji_number()
-      ) {? Minute::from_u8(n).map_err(|_| "invalid minute") }
+      ) {? Minute::from_u8(n).map_err(|_| "minute") }
 
     rule hour() -> Hour
       = n:(
           t:$(['0'..='9']*<1,2>) { t.parse().unwrap() }
           / kanji_number()
-      ) {? Hour::from_u8(n).map_err(|_| "invalid hour") }
+      ) {? Hour::from_u8(n).map_err(|_| "hour") }
 
     rule spec_minute() -> Minute
       = ['半'] _ { Minute::from_u8(30).unwrap() }
@@ -139,7 +147,7 @@ peg::parser! {
       = "rfc3339" _ t:$(['T' | 'Z' | '+' | '-' | '.' | ':' | '0'..='9']+) _ {?
           match DateTime::parse_from_rfc3339(t) {
               Ok(t) => Ok(TimeSpecifier::Exactly(t)),
-              Err(_) => Err("invalid rfc3339 time"),
+              Err(_) => Err("rfc3339 time"),
           }
       }
 
@@ -150,7 +158,7 @@ peg::parser! {
                   time: HourMinuteSpecifier::Both(h, m),
                   is_tomorrow: t.is_some(),
               }
-          }).map_err(|_| "invalid hour")
+          }).map_err(|_| "hour")
       }
       / _ ['分'] _ {?
           Minute::from_u8(x).map(|m| {
@@ -158,7 +166,7 @@ peg::parser! {
                   time: HourMinuteSpecifier::with_minute(m, None),
                   is_tomorrow: false
               }
-          }).map_err(|_| "invalid minute")
+          }).map_err(|_| "minute")
       }
       / _ ['時'] _ m:spec_minute()? {?
           Hour::from_u8(x).map(|h| {
@@ -166,7 +174,7 @@ peg::parser! {
                   time: HourMinuteSpecifier::with_hour(h, m),
                   is_tomorrow: false
               }
-          }).map_err(|_| "invalid hour")
+          }).map_err(|_| "hour")
       }
 
     rule spec_at_half() -> TimeSpecifier
@@ -186,20 +194,20 @@ peg::parser! {
 
     pub rule time_range() -> TimeRangeSpecifier
       = x:number() spec:(
-          _ minute_suffix() _ s1:$(['後'] / "以内") s2:"まで"? {?
+          _ minute_suffix() _ s:$("後まで" / ['後'] / "以内") {
               let spec = TimeSpecifier::After(HourMinuteSpecifier::with_minute(x, None));
-              match (s1, s2.is_some()) {
-                  ("以内", false) | ("後", true) => Ok(TimeRangeSpecifier::By(spec)),
-                  ("後", false) => Ok(TimeRangeSpecifier::At(spec)),
-                  _ => Err("invalid range spec"),
+              match s {
+                  "以内" | "後まで" => TimeRangeSpecifier::By(spec),
+                  "後" => TimeRangeSpecifier::At(spec),
+                  _ => unreachable!(),
               }
           }
-          / _ hour_suffix() _ m:(m:number() _ minute_suffix() _ { m })? s1:$(['後'] / "以内") s2:"まで"? {?
+          / _ hour_suffix() _ m:(m:number() _ minute_suffix() _ { m })? s:$("後まで" / ['後'] / "以内") {
               let spec = TimeSpecifier::After(HourMinuteSpecifier::with_hour(x, m));
-              match (s1, s2.is_some()) {
-                  ("以内", false) | ("後", true) => Ok(TimeRangeSpecifier::By(spec)),
-                  ("後", false) => Ok(TimeRangeSpecifier::At(spec)),
-                  _ => Err("invalid range spec"),
+              match s {
+                  "以内" | "後まで" => TimeRangeSpecifier::By(spec),
+                  "後" => TimeRangeSpecifier::At(spec),
+                  _ => unreachable!(),
               }
           }
           / spec:spec_at_tail(x) s:"まで"? {
