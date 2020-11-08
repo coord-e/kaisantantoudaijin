@@ -159,12 +159,13 @@ async fn kaisan<C: ScheduleKaisan>(
         futures.push(ctx.disconnect_user(*user_id));
     }
 
-    futures.push(ctx.react('✅'));
     if !target_users.is_empty() {
         futures.push(ctx.message(Message::Kaisan(target_users)));
     }
 
     future::try_join_all(futures).await?;
+
+    ctx.react('✅').await?;
 
     Ok(())
 }
