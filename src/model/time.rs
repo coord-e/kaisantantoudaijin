@@ -172,11 +172,9 @@ mod tests {
             ),
             is_tomorrow: false,
         };
-        let expected = now.date().and_hms(22, 15, 0) - Duration::days(1);
-        assert_eq!(
-            calculate_time(spec, now, FixedOffset::east(9 * 3600)),
-            expected
-        );
+        let tz = FixedOffset::east(9 * 3600);
+        let expected = now.with_timezone(&tz).date().and_hms(7, 15, 0);
+        assert_eq!(calculate_time(spec, now, tz), expected);
     }
 
     #[test]
