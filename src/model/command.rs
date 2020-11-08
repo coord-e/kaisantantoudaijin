@@ -79,7 +79,7 @@ peg::parser! {
       = "<@!" n:$(['0'..='9']+) ">" { UserId(n.parse().unwrap()) }
 
     rule users() -> Vec<UserId>
-      = l:user() ** _ {? if l.is_empty() { Err("non-empty list of empty users") } else { Ok(l) } }
+      = l:user() ** _ {? if l.is_empty() { Err("non-empty list of users") } else { Ok(l) } }
 
     pub rule kaisanee() -> KaisaneeSpecifier
       = me() { KaisaneeSpecifier::Me }
@@ -201,7 +201,7 @@ peg::parser! {
       / spec_at_half()
 
     rule spec_after() -> TimeSpecifier
-      = x:number() s:(
+      = x:number() _ s:(
           minute_suffix() _ { HourMinuteSpecifier::with_minute(x, None) }
           / hour_suffix() _ m:(m:number() _ minute_suffix() _ { m })? { HourMinuteSpecifier::with_hour(x, m) }
       ) { TimeSpecifier::After(s) }
