@@ -6,7 +6,8 @@ use crate::model::command::Command;
 use crate::use_case::{Help, ScheduleKaisan};
 
 use anyhow::Context as _;
-use chrono::{DateTime, FixedOffset, Utc};
+use chrono::{DateTime, Utc};
+use chrono_tz::Tz;
 use futures::lock::Mutex;
 use log::{debug, info};
 use rand::{rngs::SmallRng, Rng, SeedableRng};
@@ -46,7 +47,7 @@ pub struct Context {
     author_id: UserId,
     channel_id: ChannelId,
     message_id: MessageId,
-    timezone: FixedOffset,
+    timezone: Tz,
     rng: Arc<Mutex<SmallRng>>,
 }
 
@@ -152,17 +153,19 @@ impl TimeContext for Context {
 
 #[async_trait::async_trait]
 impl ConfigContext for Context {
-    fn timezone(&self) -> FixedOffset {
+    fn timezone(&self) -> Tz {
         self.timezone
     }
 }
 
 impl Context {
-    pub async fn from_message(
-        ctx: &serenity::client::Context,
+    pub async fn new(
+        http: Arc<Http>,
+        cache: Arc<Cache>,
+        timezone: Tz,
         message: &Message,
     ) -> Option<Context> {
-        let bot_id = ctx.cache.current_user_id().await;
+        let bot_id = cache.current_user_id().await;
 
         let guild_id = match message.guild_id {
             None => return None,
@@ -170,14 +173,14 @@ impl Context {
         };
 
         Some(Context {
-            http: Arc::clone(&ctx.http),
-            cache: Arc::clone(&ctx.cache),
+            http,
+            cache,
             bot_id,
             guild_id,
             author_id: message.author.id,
             channel_id: message.channel_id,
             message_id: message.id,
-            timezone: FixedOffset::east(9 * 3600),
+            timezone,
             rng: Arc::new(Mutex::new(SmallRng::from_entropy())),
         })
     }

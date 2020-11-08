@@ -3,13 +3,14 @@ use std::fmt::{self, Display};
 use crate::error::Error;
 use crate::model::kaisanee::KaisaneeSpecifier;
 
-use chrono::{DateTime, Datelike, FixedOffset, Timelike, Utc};
+use chrono::{DateTime, Datelike, TimeZone, Timelike, Utc};
+use chrono_tz::Tz;
 use serenity::model::{id::UserId, misc::Mentionable};
 
 pub enum Message {
     Help,
-    ScheduledAt(KaisaneeSpecifier, DateTime<FixedOffset>),
-    ScheduledBy(KaisaneeSpecifier, DateTime<FixedOffset>),
+    ScheduledAt(KaisaneeSpecifier, DateTime<Tz>),
+    ScheduledBy(KaisaneeSpecifier, DateTime<Tz>),
     Kaisan(Vec<UserId>),
     HandleError(Error),
     KaisanError(Error),
@@ -62,10 +63,10 @@ fn fmt_error(f: &mut fmt::Formatter, e: &Error) -> fmt::Result {
     }
 }
 
-fn fmt_datetime_when(
+fn fmt_datetime_when<T: TimeZone>(
     f: &mut fmt::Formatter,
-    time: DateTime<FixedOffset>,
-    now: DateTime<FixedOffset>,
+    time: DateTime<T>,
+    now: DateTime<T>,
 ) -> fmt::Result {
     if time.date() != now.date() {
         write!(f, "{}/{} ", time.date().month(), time.date().day())?;

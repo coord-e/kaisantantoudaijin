@@ -1,4 +1,4 @@
-use chrono::{DateTime, Duration, FixedOffset, Utc};
+use chrono::{DateTime, Duration, FixedOffset, TimeZone, Utc};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Error)]
@@ -77,7 +77,11 @@ pub enum TimeSpecifier {
     Exactly(DateTime<FixedOffset>),
 }
 
-pub fn calculate_time(spec: TimeSpecifier, now: DateTime<Utc>, tz: FixedOffset) -> DateTime<Utc> {
+pub fn calculate_time<T: TimeZone>(
+    spec: TimeSpecifier,
+    now: DateTime<Utc>,
+    tz: T,
+) -> DateTime<Utc> {
     match spec {
         TimeSpecifier::Now => now,
         TimeSpecifier::After(dur) => now + calculate_duration(dur),

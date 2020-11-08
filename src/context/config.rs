@@ -1,5 +1,5 @@
-use chrono::FixedOffset;
+use chrono_tz::Tz;
 
 pub trait ConfigContext {
-    fn timezone(&self) -> FixedOffset;
+    fn timezone(&self) -> Tz;
 }
