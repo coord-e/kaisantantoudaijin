@@ -798,6 +798,7 @@ dependencies = [
  "chrono-tz",
  "env_logger",
  "futures",
+ "lazy_static",
  "log",
  "peg",
  "rand",

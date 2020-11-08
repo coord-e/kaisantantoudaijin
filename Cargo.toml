@@ -19,3 +19,6 @@ futures = "0.3"
 peg = "0.6"
 async-trait = "0.1"
 redis = "0.17"
+
+[dev-dependencies]
+lazy_static = "1.4"

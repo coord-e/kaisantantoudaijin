@@ -10,3 +10,19 @@ pub trait Help: ChannelContext {
 }
 
 impl<T: ChannelContext> Help for T {}
+
+#[cfg(test)]
+mod tests {
+    use super::Help;
+    use crate::{model::message::Message, test::MockContext};
+
+    #[tokio::test]
+    async fn test() {
+        let ctx = MockContext::new();
+        ctx.help().await.unwrap();
+        assert!(matches!(
+            ctx.sent_messages.lock().await.as_slice(),
+            &[Message::Help]
+        ));
+    }
+}

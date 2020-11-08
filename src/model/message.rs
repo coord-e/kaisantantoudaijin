@@ -7,6 +7,7 @@ use chrono::{DateTime, Datelike, TimeZone, Timelike, Utc};
 use chrono_tz::Tz;
 use serenity::model::{id::UserId, misc::Mentionable};
 
+#[derive(Debug)]
 pub enum Message {
     Help,
     ScheduledAt(KaisaneeSpecifier, DateTime<Tz>),

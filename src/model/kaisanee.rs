@@ -2,7 +2,7 @@ use std::fmt::{self, Display};
 
 use serenity::model::{id::UserId, misc::Mentionable};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum KaisaneeSpecifier {
     Me,
     All,
