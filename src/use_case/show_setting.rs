@@ -5,8 +5,8 @@ use crate::model::message::Message;
 #[async_trait::async_trait]
 pub trait ShowSetting: SettingContext + ChannelContext {
     async fn show_setting(&self) -> Result<()> {
-        let requires_permission = self.requires_permission().await?;
-        let timezone = self.timezone().await?;
+        let (requires_permission, timezone) =
+            futures::future::try_join(self.requires_permission(), self.timezone()).await?;
 
         let message = Message::Setting {
             requires_permission,

@@ -8,6 +8,7 @@ use crate::model::{
 };
 
 use chrono::{DateTime, Duration, Utc};
+use futures::future;
 use log::{error, info};
 use serenity::model::{
     id::{ChannelId, UserId},
@@ -125,8 +126,7 @@ fn schedule_kaisan_at<C: ScheduleKaisan + Send + Sync>(
 
         if let Err(e) = kaisan(&ctx, author_id, voice_channel_id, kaisanee).await {
             error!("failed to kaisan: {}", &e);
-            let _ = ctx.react('❌').await;
-            let _ = ctx.message(Message::KaisanError(e)).await;
+            let _ = future::try_join(ctx.react('❌'), ctx.message(Message::KaisanError(e))).await;
         }
     });
 }
@@ -153,15 +153,18 @@ async fn kaisan<C: ScheduleKaisan>(
         }
     };
 
+    let mut futures = Vec::new();
     for user_id in &target_users {
         info!("disconnect {:?}", user_id);
-        ctx.disconnect_user(*user_id).await?;
+        futures.push(ctx.disconnect_user(*user_id));
     }
 
-    ctx.react('✅').await?;
+    futures.push(ctx.react('✅'));
     if !target_users.is_empty() {
-        ctx.message(Message::Kaisan(target_users)).await?;
+        futures.push(ctx.message(Message::Kaisan(target_users)));
     }
+
+    future::try_join_all(futures).await?;
 
     Ok(())
 }
