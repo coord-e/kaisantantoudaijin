@@ -25,7 +25,7 @@ impl Display for KaisaneeSpecifier {
                     write!(f, "{}", id.mention())?;
                 }
 
-                for id in ids[1..].into_iter() {
+                for id in ids[1..].iter() {
                     write!(f, ", {}", id.mention())?;
                 }
 

@@ -47,7 +47,7 @@ pub trait ScheduleKaisan:
                     });
                 }
 
-                self.reply(Message::ScheduledAt(
+                self.message(Message::ScheduledAt(
                     kaisanee.clone(),
                     time.with_timezone(&tz),
                 ))
@@ -68,7 +68,7 @@ pub trait ScheduleKaisan:
                 let random_duration = Duration::seconds(random_secs);
                 let time = now + random_duration;
 
-                self.reply(Message::ScheduledBy(
+                self.message(Message::ScheduledBy(
                     kaisanee.clone(),
                     by.with_timezone(&tz),
                 ))

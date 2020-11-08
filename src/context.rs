@@ -8,6 +8,7 @@ use crate::use_case::{Help, ScheduleKaisan};
 use anyhow::Context as _;
 use chrono::{DateTime, FixedOffset, Utc};
 use futures::lock::Mutex;
+use log::{debug, info};
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use serenity::{
     builder::EditMember,
@@ -111,6 +112,7 @@ impl ChannelContext for Context {
     }
 
     async fn message(&self, message: crate::model::message::Message) -> Result<()> {
+        debug!("send message: {}", message);
         self.channel_id
             .say(&self.http, message)
             .await
@@ -123,14 +125,6 @@ impl ChannelContext for Context {
 impl MessageContext for Context {
     fn author_id(&self) -> UserId {
         self.author_id
-    }
-
-    async fn reply(&self, message: crate::model::message::Message) -> Result<()> {
-        self.channel_id
-            .say(&self.http, message)
-            .await
-            .context("cannot create a reply message")?;
-        Ok(())
     }
 
     async fn react(&self, reaction: impl Into<ReactionType> + 'async_trait + Send) -> Result<()> {
@@ -198,10 +192,14 @@ impl Context {
     }
 
     pub async fn handle_message(&self, message: Message) -> Result<()> {
+        info!("handle message: {}", message.content);
+
         let command = match self.extract_command(&message.content) {
             None => return Ok(()),
             Some(s) => s.parse()?,
         };
+
+        debug!("parsed message as command: {:?}", command);
 
         match command {
             Command::Help => self.help().await,
