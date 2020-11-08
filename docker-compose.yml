@@ -1,0 +1,15 @@
+version: "3.8"
+services:
+  kaisantantoudaijin:
+    build: .
+    depends_on:
+      - redis
+    environment:
+      KAISANDAIJIN_REDIS_URI: redis://redis/
+      KAISANDAIJIN_LOG: kaisantantoudaijin
+      KAISANDAIJIN_DISCORD_TOKEN: ${KAISANDAIJIN_DISCORD_TOKEN:?}
+  redis:
+    image: redis:6
+    command: redis-server --appendonly yes
+    volumes:
+      - /data
