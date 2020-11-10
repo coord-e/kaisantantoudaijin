@@ -2,10 +2,7 @@ use crate::context::{
     ChannelContext, GuildContext, MessageContext, RandomContext, SettingContext, TimeContext,
 };
 use crate::error::{Error, Result};
-use crate::model::{
-    command::TimeRangeSpecifier, kaisanee::KaisaneeSpecifier, message::Message,
-    time::calculate_time,
-};
+use crate::model::{command::TimeRangeSpecifier, kaisanee::KaisaneeSpecifier, message::Message};
 
 use chrono::{DateTime, Duration, Utc};
 use futures::future;
@@ -51,7 +48,7 @@ pub trait ScheduleKaisan:
         let tz = self.timezone().await?;
         let time = match time_range {
             TimeRangeSpecifier::At(spec) => {
-                let time = calculate_time(spec, now, tz);
+                let time = spec.calculate_time(now, tz);
                 if time < now {
                     return Err(Error::UnreachableTime {
                         specified: time,
@@ -59,15 +56,17 @@ pub trait ScheduleKaisan:
                     });
                 }
 
-                self.message(Message::ScheduledAt(
-                    kaisanee.clone(),
-                    time.with_timezone(&tz),
-                ))
+                self.message(Message::Scheduled {
+                    spec: time_range,
+                    kaisanee: kaisanee.clone(),
+                    time: time.with_timezone(&tz),
+                    now: now.with_timezone(&tz),
+                })
                 .await?;
                 time
             }
             TimeRangeSpecifier::By(spec) => {
-                let by = calculate_time(spec, now, tz);
+                let by = spec.calculate_time(now, tz);
                 if by < now {
                     return Err(Error::UnreachableTime {
                         specified: by,
@@ -80,10 +79,12 @@ pub trait ScheduleKaisan:
                 let random_duration = Duration::seconds(random_secs);
                 let time = now + random_duration;
 
-                self.message(Message::ScheduledBy(
-                    kaisanee.clone(),
-                    by.with_timezone(&tz),
-                ))
+                self.message(Message::Scheduled {
+                    spec: time_range,
+                    kaisanee: kaisanee.clone(),
+                    time: by.with_timezone(&tz),
+                    now: now.with_timezone(&tz),
+                })
                 .await?;
                 time
             }

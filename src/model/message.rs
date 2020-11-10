@@ -1,17 +1,23 @@
 use std::fmt::{self, Display};
 
 use crate::error::Error;
+use crate::model::command::TimeRangeSpecifier;
 use crate::model::kaisanee::KaisaneeSpecifier;
+use crate::model::time::TimeSpecifier;
 
-use chrono::{DateTime, Datelike, TimeZone, Timelike, Utc};
+use chrono::{DateTime, Datelike, TimeZone, Timelike};
 use chrono_tz::Tz;
 use serenity::model::{id::UserId, misc::Mentionable};
 
 #[derive(Debug)]
 pub enum Message {
     Help,
-    ScheduledAt(KaisaneeSpecifier, DateTime<Tz>),
-    ScheduledBy(KaisaneeSpecifier, DateTime<Tz>),
+    Scheduled {
+        spec: TimeRangeSpecifier,
+        kaisanee: KaisaneeSpecifier,
+        time: DateTime<Tz>,
+        now: DateTime<Tz>,
+    },
     Kaisan(Vec<UserId>),
     Setting {
         requires_permission: bool,
@@ -48,14 +54,22 @@ impl Display for Message {
 ・`!kaisan require-permission BOOLEAN`: 他人を解散するのに Move Members 権限を必要とするか設定
 ",
             ),
-            Message::ScheduledAt(kaisanee, time) => {
-                let now = Utc::now().with_timezone(&time.timezone());
-                fmt_datetime_when(f, *time, now)?;
+            Message::Scheduled {
+                spec: TimeRangeSpecifier::At(spec),
+                kaisanee,
+                time,
+                now,
+            } => {
+                fmt_datetime_when(f, *spec, *time, *now)?;
                 write!(f, "に{}を解散します", kaisanee)
             }
-            Message::ScheduledBy(kaisanee, time) => {
-                let now = Utc::now().with_timezone(&time.timezone());
-                fmt_datetime_when(f, *time, now)?;
+            Message::Scheduled {
+                spec: TimeRangeSpecifier::By(spec),
+                kaisanee,
+                time,
+                now,
+            } => {
+                fmt_datetime_when(f, *spec, *time, *now)?;
                 write!(f, "までに{}を解散します", kaisanee)
             }
             Message::Kaisan(ids) => {
@@ -101,23 +115,42 @@ fn fmt_error(f: &mut fmt::Formatter, e: &Error) -> fmt::Result {
 
 fn fmt_datetime_when<T: TimeZone>(
     f: &mut fmt::Formatter,
+    spec: TimeSpecifier,
     time: DateTime<T>,
     now: DateTime<T>,
 ) -> fmt::Result {
-    if time.date() != now.date() {
-        write!(f, "{}/{} ", time.date().month(), time.date().day())?;
+    if let TimeSpecifier::Now = spec {
+        return write!(f, "今すぐ");
     }
-    if time.hour() != now.hour() {
-        write!(f, "{}時", time.hour())?;
-    }
-    write!(f, "{}分（", time.minute())?;
 
-    let duration = time - now;
-    if duration.num_hours() != 0 {
-        write!(f, "{}時間", duration.num_hours())?;
+    if spec.is_interested_in_time() {
+        if time.date() != now.date() {
+            write!(f, "{}/{} ", time.date().month(), time.date().day())?;
+        }
+        if time.hour() != now.hour() {
+            write!(f, "{}時", time.hour())?;
+            if time.minute() != 0 {
+                write!(f, "{}分", time.minute())?;
+            }
+        } else {
+            write!(f, "{}分", time.minute())?;
+        }
     }
-    if duration.num_minutes() != 0 || (duration.num_hours() == 0 && duration.num_days() == 0) {
-        write!(f, "{}分", duration.num_minutes() % 60)?;
+
+    if spec.is_interested_in_time() && spec.is_interested_in_duration() {
+        write!(f, "、")?;
     }
-    write!(f, "後）")
+
+    if spec.is_interested_in_duration() {
+        let duration = time - now;
+        if duration.num_hours() != 0 {
+            write!(f, "{}時間", duration.num_hours())?;
+        }
+        if duration.num_minutes() != 0 || duration.num_hours() == 0 {
+            write!(f, "{}分", duration.num_minutes() % 60)?;
+        }
+        write!(f, "後")?;
+    }
+
+    Ok(())
 }
