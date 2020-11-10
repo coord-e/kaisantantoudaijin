@@ -55,6 +55,11 @@ impl Display for Message {
 ",
             ),
             Message::Scheduled {
+                spec: TimeRangeSpecifier::Now,
+                kaisanee,
+                ..
+            } => write!(f, "今すぐに{}を解散します", kaisanee),
+            Message::Scheduled {
                 spec: TimeRangeSpecifier::At(spec),
                 kaisanee,
                 time,
@@ -119,10 +124,6 @@ fn fmt_datetime_when<T: TimeZone>(
     time: DateTime<T>,
     now: DateTime<T>,
 ) -> fmt::Result {
-    if let TimeSpecifier::Now = spec {
-        return write!(f, "今すぐ");
-    }
-
     if spec.is_interested_in_time() {
         if time.date() != now.date() {
             write!(f, "{}/{} ", time.date().month(), time.date().day())?;

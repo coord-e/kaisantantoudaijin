@@ -47,6 +47,9 @@ pub trait ScheduleKaisan:
         let now = self.current_time();
         let tz = self.timezone().await?;
         let time = match time_range {
+            TimeRangeSpecifier::Now => {
+                return kaisan(self, author_id, voice_channel_id, kaisanee).await;
+            }
             TimeRangeSpecifier::At(spec) => {
                 let time = spec.calculate_time(now, tz);
                 if time < now {
@@ -189,12 +192,9 @@ mod tests {
     async fn test_all() {
         let ctx = MockContext::with_author(MOCK_AUTHOR_2);
 
-        ctx.schedule_kaisan(
-            KaisaneeSpecifier::All,
-            TimeRangeSpecifier::At(TimeSpecifier::Now),
-        )
-        .await
-        .unwrap();
+        ctx.schedule_kaisan(KaisaneeSpecifier::All, TimeRangeSpecifier::Now)
+            .await
+            .unwrap();
 
         // TODO: more reliable way to wait for change
         tokio::time::delay_for(Duration::from_millis(200)).await;
@@ -218,12 +218,9 @@ mod tests {
     async fn test_me() {
         let ctx = MockContext::with_author(MOCK_AUTHOR_2);
 
-        ctx.schedule_kaisan(
-            KaisaneeSpecifier::Me,
-            TimeRangeSpecifier::At(TimeSpecifier::Now),
-        )
-        .await
-        .unwrap();
+        ctx.schedule_kaisan(KaisaneeSpecifier::Me, TimeRangeSpecifier::Now)
+            .await
+            .unwrap();
 
         // TODO: more reliable way to wait for change
         tokio::time::delay_for(Duration::from_millis(200)).await;
@@ -267,10 +264,7 @@ mod tests {
         ctx.requires_permission.store(true, Ordering::SeqCst);
 
         let res = ctx
-            .schedule_kaisan(
-                KaisaneeSpecifier::All,
-                TimeRangeSpecifier::At(TimeSpecifier::Now),
-            )
+            .schedule_kaisan(KaisaneeSpecifier::All, TimeRangeSpecifier::Now)
             .await;
         assert!(matches!(res, Err(Error::InsufficientPermission(_))));
     }
@@ -281,10 +275,7 @@ mod tests {
         ctx.requires_permission.store(false, Ordering::SeqCst);
 
         let res = ctx
-            .schedule_kaisan(
-                KaisaneeSpecifier::All,
-                TimeRangeSpecifier::At(TimeSpecifier::Now),
-            )
+            .schedule_kaisan(KaisaneeSpecifier::All, TimeRangeSpecifier::Now)
             .await;
         assert!(matches!(res, Ok(())));
     }

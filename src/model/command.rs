@@ -15,6 +15,7 @@ use crate::model::{
 pub enum TimeRangeSpecifier {
     By(TimeSpecifier),
     At(TimeSpecifier),
+    Now,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -231,7 +232,7 @@ peg::parser! {
               TimeRangeSpecifier::At(spec)
           }
       }
-      / ("now" / "今すぐ") { TimeRangeSpecifier::At(TimeSpecifier::Now) }
+      / ("now" / "今すぐ") { TimeRangeSpecifier::Now }
       / "at" _ spec:spec_at() { TimeRangeSpecifier::At(spec) }
       / "by" _ spec:spec_at() { TimeRangeSpecifier::By(spec) }
       / "after" _ spec:spec_after() { TimeRangeSpecifier::At(spec) }
@@ -391,18 +392,12 @@ mod tests {
 
     #[test]
     fn test_now_ja() {
-        assert_eq!(
-            parser::time_range("今すぐ"),
-            Ok(TimeRangeSpecifier::At(TimeSpecifier::Now))
-        );
+        assert_eq!(parser::time_range("今すぐ"), Ok(TimeRangeSpecifier::Now));
     }
 
     #[test]
     fn test_now_en() {
-        assert_eq!(
-            parser::time_range("now"),
-            Ok(TimeRangeSpecifier::At(TimeSpecifier::Now))
-        );
+        assert_eq!(parser::time_range("now"), Ok(TimeRangeSpecifier::Now));
     }
 
     #[test]

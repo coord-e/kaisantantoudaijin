@@ -118,7 +118,6 @@ impl AtTimeSpecifier {
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum TimeSpecifier {
-    Now,
     After(AfterTimeSpecifier),
     At(AtTimeSpecifier),
     Exactly(DateTime<FixedOffset>),
@@ -127,7 +126,6 @@ pub enum TimeSpecifier {
 impl TimeSpecifier {
     pub fn calculate_time<T: TimeZone>(&self, now: DateTime<Utc>, tz: T) -> DateTime<Utc> {
         match self {
-            TimeSpecifier::Now => now,
             TimeSpecifier::After(dur) => now + dur.calculate_duration(),
             TimeSpecifier::At(time) => {
                 let now_date = now.with_timezone(&tz).date();
@@ -180,14 +178,6 @@ mod tests {
     use super::{AfterTimeSpecifier, AtTimeSpecifier, Hour, Minute, TimeSpecifier};
 
     use chrono::{Duration, FixedOffset, Utc};
-
-    #[test]
-    fn test_calculate_time_now() {
-        let now = Utc::now();
-        let spec = TimeSpecifier::Now;
-        assert_eq!(spec.calculate_time(now, Utc), now);
-        assert_eq!(spec.calculate_time(now, FixedOffset::east(3600)), now);
-    }
 
     #[test]
     fn test_calculate_time_after() {
