@@ -48,6 +48,7 @@ pub enum AfterTimeSpecifier {
     Hour(u8),
     Minute(u8),
     HourMinute(u8, u8),
+    Second(u8),
 }
 
 impl AfterTimeSpecifier {
@@ -158,6 +159,7 @@ fn calculate_duration(spec: AfterTimeSpecifier) -> Duration {
         AfterTimeSpecifier::HourMinute(h, m) => {
             Duration::hours(h.into()) + Duration::minutes(m.into())
         }
+        AfterTimeSpecifier::Second(s) => Duration::seconds(s.into()),
     }
 }
 

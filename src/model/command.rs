@@ -86,6 +86,9 @@ peg::parser! {
       / all() { KaisaneeSpecifier::All }
       / l:users() { KaisaneeSpecifier::Users(l) }
 
+    rule second_suffix()
+      = "seconds" / "second" / "sec" / "s" / "秒"
+
     rule minute_suffix()
       = "minutes" / "minute" / "min" / "m" / "分"
 
@@ -192,29 +195,27 @@ peg::parser! {
       / spec_at_half()
 
     rule spec_after() -> TimeSpecifier
-      = x:number() _ s:(
+      = x:number() _ spec:(
           minute_suffix() _ { AfterTimeSpecifier::with_minute(x, None) }
+          / second_suffix() _ { AfterTimeSpecifier::Second(x) }
           / hour_suffix() _ m:(m:number() _ minute_suffix() _ { m })? { AfterTimeSpecifier::with_hour(x, m) }
-      ) { TimeSpecifier::After(s) }
+      ) { TimeSpecifier::After(spec) }
+
+    rule spec_after_suffix(spec: AfterTimeSpecifier) -> TimeRangeSpecifier
+      = s:$("後まで" / ['後'] / "以内") {
+          let spec = TimeSpecifier::After(spec);
+          match s {
+              "以内" | "後まで" => TimeRangeSpecifier::By(spec),
+              "後" => TimeRangeSpecifier::At(spec),
+              _ => unreachable!(),
+          }
+      }
 
     pub rule time_range() -> TimeRangeSpecifier
       = x:number() spec:(
-          _ minute_suffix() _ s:$("後まで" / ['後'] / "以内") {
-              let spec = TimeSpecifier::After(AfterTimeSpecifier::with_minute(x, None));
-              match s {
-                  "以内" | "後まで" => TimeRangeSpecifier::By(spec),
-                  "後" => TimeRangeSpecifier::At(spec),
-                  _ => unreachable!(),
-              }
-          }
-          / _ hour_suffix() _ m:(m:number() _ minute_suffix() _ { m })? s:$("後まで" / ['後'] / "以内") {
-              let spec = TimeSpecifier::After(AfterTimeSpecifier::with_hour(x, m));
-              match s {
-                  "以内" | "後まで" => TimeRangeSpecifier::By(spec),
-                  "後" => TimeRangeSpecifier::At(spec),
-                  _ => unreachable!(),
-              }
-          }
+          _ second_suffix() _ spec:spec_after_suffix((AfterTimeSpecifier::Second(x))) { spec }
+          / _ minute_suffix() _ spec:spec_after_suffix((AfterTimeSpecifier::Minute(x))) { spec }
+          / _ hour_suffix() _ m:(m:number() _ minute_suffix() _ { m })? spec:spec_after_suffix((AfterTimeSpecifier::with_hour(x, m))) { spec }
           / spec:spec_at_tail(x) s:"まで"? {
               if s.is_some() {
                   TimeRangeSpecifier::By(spec)
@@ -485,6 +486,12 @@ mod tests {
                 AfterTimeSpecifier::HourMinute(1, 30)
             )))
         );
+        assert_eq!(
+            parser::time_range("三秒後"),
+            Ok(TimeRangeSpecifier::At(TimeSpecifier::After(
+                AfterTimeSpecifier::Second(3)
+            )))
+        );
     }
 
     #[test]
@@ -555,6 +562,12 @@ mod tests {
                 AfterTimeSpecifier::Minute(90)
             )))
         );
+        assert_eq!(
+            parser::time_range("五十秒以内"),
+            Ok(TimeRangeSpecifier::By(TimeSpecifier::After(
+                AfterTimeSpecifier::Second(50)
+            )))
+        );
     }
 
     #[test]
@@ -602,6 +615,18 @@ mod tests {
                 AfterTimeSpecifier::HourMinute(1, 30)
             )))
         );
+        assert_eq!(
+            parser::time_range("after 2s"),
+            Ok(TimeRangeSpecifier::At(TimeSpecifier::After(
+                AfterTimeSpecifier::Second(2)
+            )))
+        );
+        assert_eq!(
+            parser::time_range("after 2 seconds"),
+            Ok(TimeRangeSpecifier::At(TimeSpecifier::After(
+                AfterTimeSpecifier::Second(2)
+            )))
+        );
     }
 
     #[test]
@@ -646,6 +671,12 @@ mod tests {
             parser::time_range("within 90 minute"),
             Ok(TimeRangeSpecifier::By(TimeSpecifier::After(
                 AfterTimeSpecifier::Minute(90)
+            )))
+        );
+        assert_eq!(
+            parser::time_range("within 30sec"),
+            Ok(TimeRangeSpecifier::By(TimeSpecifier::After(
+                AfterTimeSpecifier::Second(30)
             )))
         );
     }
