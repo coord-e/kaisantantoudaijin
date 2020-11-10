@@ -9,7 +9,7 @@ use anyhow::Context as _;
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 use futures::lock::Mutex;
-use log::{debug, info};
+use log::debug;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use redis::{AsyncCommands, FromRedisValue, ToRedisArgs};
 use serenity::{
@@ -255,8 +255,6 @@ impl Context {
     }
 
     pub async fn handle_message(&self, message: Message) -> Result<()> {
-        info!("handle message: {}", message.content);
-
         let command = match self.extract_command(&message.content) {
             None => return Ok(()),
             Some(s) => s.parse()?,
