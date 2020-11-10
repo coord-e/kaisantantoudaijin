@@ -44,24 +44,62 @@ impl Minute {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
-pub enum HourMinuteSpecifier<H, M> {
-    Hour(H),
-    Minute(M),
-    Both(H, M),
+pub enum AfterTimeSpecifier {
+    Hour(u8),
+    Minute(u8),
+    HourMinute(u8, u8),
 }
 
-impl<H, M> HourMinuteSpecifier<H, M> {
-    pub fn with_hour(h: H, m: Option<M>) -> HourMinuteSpecifier<H, M> {
+impl AfterTimeSpecifier {
+    pub fn with_hour(h: u8, m: Option<u8>) -> AfterTimeSpecifier {
         match m {
-            Some(m) => HourMinuteSpecifier::Both(h, m),
-            None => HourMinuteSpecifier::Hour(h),
+            Some(m) => AfterTimeSpecifier::HourMinute(h, m),
+            None => AfterTimeSpecifier::Hour(h),
         }
     }
 
-    pub fn with_minute(m: M, h: Option<H>) -> HourMinuteSpecifier<H, M> {
+    pub fn with_minute(m: u8, h: Option<u8>) -> AfterTimeSpecifier {
         match h {
-            Some(h) => HourMinuteSpecifier::Both(h, m),
-            None => HourMinuteSpecifier::Minute(m),
+            Some(h) => AfterTimeSpecifier::HourMinute(h, m),
+            None => AfterTimeSpecifier::Minute(m),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum AtTimeSpecifier {
+    Hour {
+        hour: Hour,
+        is_tomorrow: bool,
+    },
+    Minute(Minute),
+    HourMinute {
+        hour: Hour,
+        minute: Minute,
+        is_tomorrow: bool,
+    },
+}
+
+impl AtTimeSpecifier {
+    pub fn with_hour(hour: Hour, minute: Option<Minute>, is_tomorrow: bool) -> AtTimeSpecifier {
+        match minute {
+            Some(minute) => AtTimeSpecifier::HourMinute {
+                hour,
+                minute,
+                is_tomorrow,
+            },
+            None => AtTimeSpecifier::Hour { hour, is_tomorrow },
+        }
+    }
+
+    pub fn with_minute(minute: Minute, hour: Option<Hour>) -> AtTimeSpecifier {
+        match hour {
+            Some(hour) => AtTimeSpecifier::HourMinute {
+                hour,
+                minute,
+                is_tomorrow: false,
+            },
+            None => AtTimeSpecifier::Minute(minute),
         }
     }
 }
@@ -69,11 +107,8 @@ impl<H, M> HourMinuteSpecifier<H, M> {
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
 pub enum TimeSpecifier {
     Now,
-    After(HourMinuteSpecifier<u8, u8>),
-    At {
-        time: HourMinuteSpecifier<Hour, Minute>,
-        is_tomorrow: bool,
-    },
+    After(AfterTimeSpecifier),
+    At(AtTimeSpecifier),
     Exactly(DateTime<FixedOffset>),
 }
 
@@ -85,17 +120,30 @@ pub fn calculate_time<T: TimeZone>(
     match spec {
         TimeSpecifier::Now => now,
         TimeSpecifier::After(dur) => now + calculate_duration(dur),
-        TimeSpecifier::At { time, is_tomorrow } => {
+        TimeSpecifier::At(time) => {
             let now_date = now.with_timezone(&tz).date();
-            let t = match time {
-                HourMinuteSpecifier::Hour(h) => now_date.and_hms(h.as_u32(), 0, 0),
-                HourMinuteSpecifier::Minute(m) => now_date.and_hms(0, m.as_u32(), 0),
-                HourMinuteSpecifier::Both(h, m) => now_date.and_hms(h.as_u32(), m.as_u32(), 0),
-            };
-            if is_tomorrow {
-                t + Duration::days(1)
-            } else {
-                t
+            match time {
+                AtTimeSpecifier::Hour { hour, is_tomorrow } => {
+                    let t = now_date.and_hms(hour.as_u32(), 0, 0);
+                    if is_tomorrow {
+                        t + Duration::days(1)
+                    } else {
+                        t
+                    }
+                }
+                AtTimeSpecifier::Minute(m) => now_date.and_hms(0, m.as_u32(), 0),
+                AtTimeSpecifier::HourMinute {
+                    hour,
+                    minute,
+                    is_tomorrow,
+                } => {
+                    let t = now_date.and_hms(hour.as_u32(), minute.as_u32(), 0);
+                    if is_tomorrow {
+                        t + Duration::days(1)
+                    } else {
+                        t
+                    }
+                }
             }
             .with_timezone(&Utc)
         }
@@ -103,17 +151,19 @@ pub fn calculate_time<T: TimeZone>(
     }
 }
 
-fn calculate_duration(spec: HourMinuteSpecifier<u8, u8>) -> Duration {
+fn calculate_duration(spec: AfterTimeSpecifier) -> Duration {
     match spec {
-        HourMinuteSpecifier::Hour(h) => Duration::hours(h.into()),
-        HourMinuteSpecifier::Minute(m) => Duration::minutes(m.into()),
-        HourMinuteSpecifier::Both(h, m) => Duration::hours(h.into()) + Duration::minutes(m.into()),
+        AfterTimeSpecifier::Hour(h) => Duration::hours(h.into()),
+        AfterTimeSpecifier::Minute(m) => Duration::minutes(m.into()),
+        AfterTimeSpecifier::HourMinute(h, m) => {
+            Duration::hours(h.into()) + Duration::minutes(m.into())
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{calculate_time, Hour, HourMinuteSpecifier, Minute, TimeSpecifier};
+    use super::{calculate_time, AfterTimeSpecifier, AtTimeSpecifier, Hour, Minute, TimeSpecifier};
 
     use chrono::{Duration, FixedOffset, Utc};
 
@@ -128,7 +178,7 @@ mod tests {
     #[test]
     fn test_calculate_time_after() {
         let now = Utc::now();
-        let spec = TimeSpecifier::After(HourMinuteSpecifier::Both(3, 15));
+        let spec = TimeSpecifier::After(AfterTimeSpecifier::HourMinute(3, 15));
         let expected = now + Duration::hours(3) + Duration::minutes(15);
         assert_eq!(calculate_time(spec, now, Utc), expected);
         assert_eq!(calculate_time(spec, now, FixedOffset::east(3600)), expected);
@@ -137,13 +187,11 @@ mod tests {
     #[test]
     fn test_calculate_time_at() {
         let now = Utc::now();
-        let spec = TimeSpecifier::At {
-            time: HourMinuteSpecifier::Both(
-                Hour::from_u8(12).unwrap(),
-                Minute::from_u8(35).unwrap(),
-            ),
+        let spec = TimeSpecifier::At(AtTimeSpecifier::HourMinute {
+            hour: Hour::from_u8(12).unwrap(),
+            minute: Minute::from_u8(35).unwrap(),
             is_tomorrow: false,
-        };
+        });
         let expected = now.date().and_hms(12, 35, 0);
         assert_eq!(calculate_time(spec, now, Utc), expected);
     }
@@ -151,13 +199,11 @@ mod tests {
     #[test]
     fn test_calculate_time_at_tomorrow() {
         let now = Utc::now();
-        let spec = TimeSpecifier::At {
-            time: HourMinuteSpecifier::Both(
-                Hour::from_u8(23).unwrap(),
-                Minute::from_u8(25).unwrap(),
-            ),
+        let spec = TimeSpecifier::At(AtTimeSpecifier::HourMinute {
+            hour: Hour::from_u8(23).unwrap(),
+            minute: Minute::from_u8(25).unwrap(),
             is_tomorrow: true,
-        };
+        });
         let expected = now.date().and_hms(23, 25, 0) + Duration::days(1);
         assert_eq!(calculate_time(spec, now, Utc), expected);
     }
@@ -165,13 +211,11 @@ mod tests {
     #[test]
     fn test_calculate_time_at_with_tz() {
         let now = Utc::now();
-        let spec = TimeSpecifier::At {
-            time: HourMinuteSpecifier::Both(
-                Hour::from_u8(7).unwrap(),
-                Minute::from_u8(15).unwrap(),
-            ),
+        let spec = TimeSpecifier::At(AtTimeSpecifier::HourMinute {
+            hour: Hour::from_u8(7).unwrap(),
+            minute: Minute::from_u8(15).unwrap(),
             is_tomorrow: false,
-        };
+        });
         let tz = FixedOffset::east(9 * 3600);
         let expected = now.with_timezone(&tz).date().and_hms(7, 15, 0);
         assert_eq!(calculate_time(spec, now, tz), expected);

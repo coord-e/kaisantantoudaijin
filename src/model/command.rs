@@ -8,7 +8,7 @@ use serenity::model::id::UserId;
 
 use crate::model::{
     kaisanee::KaisaneeSpecifier,
-    time::{Hour, HourMinuteSpecifier, Minute, TimeSpecifier},
+    time::{AfterTimeSpecifier, AtTimeSpecifier, Hour, Minute, TimeSpecifier},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -153,9 +153,9 @@ peg::parser! {
 
     rule spec_at_tomorrow() -> TimeSpecifier
       = "明日の" _ h:hour() s:(
-          [':'] m:minute() _ { HourMinuteSpecifier::Both(h, m) }
-          / _ ['時'] _ m:spec_minute()? { HourMinuteSpecifier::with_hour(h, m) }
-      ) { TimeSpecifier::At { time: s, is_tomorrow: true } }
+          [':'] m:minute() _ { AtTimeSpecifier::HourMinute { hour: h, minute: m, is_tomorrow: true } }
+          / _ ['時'] _ m:spec_minute()? { AtTimeSpecifier::with_hour(h, m, true) }
+      ) { TimeSpecifier::At(s) }
 
     rule spec_at_rfc3339() -> TimeSpecifier
       = "rfc3339" _ t:$(['T' | 'Z' | '+' | '-' | '.' | ':' | '0'..='9']+) _ {?
@@ -167,32 +167,23 @@ peg::parser! {
 
     rule spec_at_tail(x: u8) -> TimeSpecifier
       = [':'] m:minute() _ t:("tomorrow" _)? {?
-          Hour::from_u8(x).map(|h| {
-              TimeSpecifier::At {
-                  time: HourMinuteSpecifier::Both(h, m),
-                  is_tomorrow: t.is_some(),
-              }
+          Hour::from_u8(x).map(|hour| {
+              TimeSpecifier::At(AtTimeSpecifier::HourMinute { hour, minute: m, is_tomorrow: t.is_some() })
           }).map_err(|_| "hour")
       }
       / _ ['分'] _ {?
           Minute::from_u8(x).map(|m| {
-              TimeSpecifier::At {
-                  time: HourMinuteSpecifier::with_minute(m, None),
-                  is_tomorrow: false
-              }
+              TimeSpecifier::At(AtTimeSpecifier::with_minute(m, None))
           }).map_err(|_| "minute")
       }
       / _ ['時'] _ m:spec_minute()? {?
           Hour::from_u8(x).map(|h| {
-              TimeSpecifier::At {
-                  time: HourMinuteSpecifier::with_hour(h, m),
-                  is_tomorrow: false
-              }
+              TimeSpecifier::At(AtTimeSpecifier::with_hour(h, m, false))
           }).map_err(|_| "hour")
       }
 
     rule spec_at_half() -> TimeSpecifier
-      = ['半'] _ { TimeSpecifier::At { time: HourMinuteSpecifier::Minute(Minute::from_u8(30).unwrap()), is_tomorrow: false } }
+      = ['半'] _ { TimeSpecifier::At(AtTimeSpecifier::Minute(Minute::from_u8(30).unwrap())) }
 
     rule spec_at() -> TimeSpecifier
       = x:number() spec:spec_at_tail(x) { spec }
@@ -202,14 +193,14 @@ peg::parser! {
 
     rule spec_after() -> TimeSpecifier
       = x:number() _ s:(
-          minute_suffix() _ { HourMinuteSpecifier::with_minute(x, None) }
-          / hour_suffix() _ m:(m:number() _ minute_suffix() _ { m })? { HourMinuteSpecifier::with_hour(x, m) }
+          minute_suffix() _ { AfterTimeSpecifier::with_minute(x, None) }
+          / hour_suffix() _ m:(m:number() _ minute_suffix() _ { m })? { AfterTimeSpecifier::with_hour(x, m) }
       ) { TimeSpecifier::After(s) }
 
     pub rule time_range() -> TimeRangeSpecifier
       = x:number() spec:(
           _ minute_suffix() _ s:$("後まで" / ['後'] / "以内") {
-              let spec = TimeSpecifier::After(HourMinuteSpecifier::with_minute(x, None));
+              let spec = TimeSpecifier::After(AfterTimeSpecifier::with_minute(x, None));
               match s {
                   "以内" | "後まで" => TimeRangeSpecifier::By(spec),
                   "後" => TimeRangeSpecifier::At(spec),
@@ -217,7 +208,7 @@ peg::parser! {
               }
           }
           / _ hour_suffix() _ m:(m:number() _ minute_suffix() _ { m })? s:$("後まで" / ['後'] / "以内") {
-              let spec = TimeSpecifier::After(HourMinuteSpecifier::with_hour(x, m));
+              let spec = TimeSpecifier::After(AfterTimeSpecifier::with_hour(x, m));
               match s {
                   "以内" | "後まで" => TimeRangeSpecifier::By(spec),
                   "後" => TimeRangeSpecifier::At(spec),
@@ -273,7 +264,7 @@ mod tests {
     use super::{parser, Command, TimeRangeSpecifier};
     use crate::model::{
         kaisanee::KaisaneeSpecifier,
-        time::{Hour, HourMinuteSpecifier, Minute, TimeSpecifier},
+        time::{AfterTimeSpecifier, AtTimeSpecifier, Hour, Minute, TimeSpecifier},
     };
 
     use chrono_tz::Tz;
@@ -312,10 +303,10 @@ mod tests {
             parser::command("明日の1時に"),
             Ok(Command::Kaisan {
                 kaisanee: KaisaneeSpecifier::All,
-                time_range: TimeRangeSpecifier::At(TimeSpecifier::At {
-                    time: HourMinuteSpecifier::Hour(Hour::from_u8(1).unwrap()),
+                time_range: TimeRangeSpecifier::At(TimeSpecifier::At(AtTimeSpecifier::Hour {
+                    hour: Hour::from_u8(1).unwrap(),
                     is_tomorrow: true,
-                })
+                }))
             })
         );
         assert_eq!(
@@ -323,7 +314,7 @@ mod tests {
             Ok(Command::Kaisan {
                 kaisanee: KaisaneeSpecifier::Me,
                 time_range: TimeRangeSpecifier::At(TimeSpecifier::After(
-                    HourMinuteSpecifier::Minute(10)
+                    AfterTimeSpecifier::Minute(10)
                 ))
             })
         );
@@ -331,10 +322,9 @@ mod tests {
             parser::command("10分に私を解散"),
             Ok(Command::Kaisan {
                 kaisanee: KaisaneeSpecifier::Me,
-                time_range: TimeRangeSpecifier::At(TimeSpecifier::At {
-                    time: HourMinuteSpecifier::Minute(Minute::from_u8(10).unwrap()),
-                    is_tomorrow: false,
-                })
+                time_range: TimeRangeSpecifier::At(TimeSpecifier::At(AtTimeSpecifier::Minute(
+                    Minute::from_u8(10).unwrap()
+                ))),
             })
         );
         assert_eq!(
@@ -342,7 +332,7 @@ mod tests {
             Ok(Command::Kaisan {
                 kaisanee: KaisaneeSpecifier::All,
                 time_range: TimeRangeSpecifier::At(TimeSpecifier::After(
-                    HourMinuteSpecifier::Minute(1)
+                    AfterTimeSpecifier::Minute(1)
                 ))
             })
         );
@@ -354,26 +344,26 @@ mod tests {
             parser::command("me 10:10"),
             Ok(Command::Kaisan {
                 kaisanee: KaisaneeSpecifier::Me,
-                time_range: TimeRangeSpecifier::At(TimeSpecifier::At {
-                    time: HourMinuteSpecifier::Both(
-                        Hour::from_u8(10).unwrap(),
-                        Minute::from_u8(10).unwrap()
-                    ),
-                    is_tomorrow: false,
-                })
+                time_range: TimeRangeSpecifier::At(TimeSpecifier::At(
+                    AtTimeSpecifier::HourMinute {
+                        hour: Hour::from_u8(10).unwrap(),
+                        minute: Minute::from_u8(10).unwrap(),
+                        is_tomorrow: false,
+                    }
+                ))
             })
         );
         assert_eq!(
             parser::command("10:10 tomorrow"),
             Ok(Command::Kaisan {
                 kaisanee: KaisaneeSpecifier::All,
-                time_range: TimeRangeSpecifier::At(TimeSpecifier::At {
-                    time: HourMinuteSpecifier::Both(
-                        Hour::from_u8(10).unwrap(),
-                        Minute::from_u8(10).unwrap()
-                    ),
-                    is_tomorrow: true,
-                })
+                time_range: TimeRangeSpecifier::At(TimeSpecifier::At(
+                    AtTimeSpecifier::HourMinute {
+                        hour: Hour::from_u8(10).unwrap(),
+                        minute: Minute::from_u8(10).unwrap(),
+                        is_tomorrow: true,
+                    }
+                ))
             })
         );
     }
@@ -418,56 +408,59 @@ mod tests {
     fn test_at_ja() {
         assert_eq!(
             parser::time_range("二十分"),
-            Ok(TimeRangeSpecifier::At(TimeSpecifier::At {
-                time: HourMinuteSpecifier::Minute(Minute::from_u8(20).unwrap()),
-                is_tomorrow: false
-            }))
+            Ok(TimeRangeSpecifier::At(TimeSpecifier::At(
+                AtTimeSpecifier::Minute(Minute::from_u8(20).unwrap())
+            )))
         );
         assert_eq!(
             parser::time_range("0:15"),
-            Ok(TimeRangeSpecifier::At(TimeSpecifier::At {
-                time: HourMinuteSpecifier::Both(
-                    Hour::from_u8(0).unwrap(),
-                    Minute::from_u8(15).unwrap()
-                ),
-                is_tomorrow: false
-            }))
+            Ok(TimeRangeSpecifier::At(TimeSpecifier::At(
+                AtTimeSpecifier::HourMinute {
+                    hour: Hour::from_u8(0).unwrap(),
+                    minute: Minute::from_u8(15).unwrap(),
+                    is_tomorrow: false,
+                }
+            )))
         );
         assert!(parser::time_range("90分").is_err());
         assert_eq!(
             parser::time_range("十時"),
-            Ok(TimeRangeSpecifier::At(TimeSpecifier::At {
-                time: HourMinuteSpecifier::Hour(Hour::from_u8(10).unwrap()),
-                is_tomorrow: false
-            }))
+            Ok(TimeRangeSpecifier::At(TimeSpecifier::At(
+                AtTimeSpecifier::Hour {
+                    hour: Hour::from_u8(10).unwrap(),
+                    is_tomorrow: false,
+                }
+            )))
         );
         assert_eq!(
             parser::time_range("1時半"),
-            Ok(TimeRangeSpecifier::At(TimeSpecifier::At {
-                time: HourMinuteSpecifier::Both(
-                    Hour::from_u8(1).unwrap(),
-                    Minute::from_u8(30).unwrap()
-                ),
-                is_tomorrow: false,
-            }))
+            Ok(TimeRangeSpecifier::At(TimeSpecifier::At(
+                AtTimeSpecifier::HourMinute {
+                    hour: Hour::from_u8(1).unwrap(),
+                    minute: Minute::from_u8(30).unwrap(),
+                    is_tomorrow: false,
+                }
+            )))
         );
         assert!(parser::time_range("30時").is_err());
         assert_eq!(
             parser::time_range("明日の一時"),
-            Ok(TimeRangeSpecifier::At(TimeSpecifier::At {
-                time: HourMinuteSpecifier::Hour(Hour::from_u8(1).unwrap()),
-                is_tomorrow: true
-            }))
+            Ok(TimeRangeSpecifier::At(TimeSpecifier::At(
+                AtTimeSpecifier::Hour {
+                    hour: Hour::from_u8(1).unwrap(),
+                    is_tomorrow: true
+                }
+            )))
         );
         assert_eq!(
             parser::time_range("明日の10時15分"),
-            Ok(TimeRangeSpecifier::At(TimeSpecifier::At {
-                time: HourMinuteSpecifier::Both(
-                    Hour::from_u8(10).unwrap(),
-                    Minute::from_u8(15).unwrap()
-                ),
-                is_tomorrow: true
-            }))
+            Ok(TimeRangeSpecifier::At(TimeSpecifier::At(
+                AtTimeSpecifier::HourMinute {
+                    hour: Hour::from_u8(10).unwrap(),
+                    minute: Minute::from_u8(15).unwrap(),
+                    is_tomorrow: true,
+                }
+            )))
         );
         assert!(parser::time_range("明日の15分").is_err());
     }
@@ -477,19 +470,19 @@ mod tests {
         assert_eq!(
             parser::time_range("90分後"),
             Ok(TimeRangeSpecifier::At(TimeSpecifier::After(
-                HourMinuteSpecifier::Minute(90)
+                AfterTimeSpecifier::Minute(90)
             )))
         );
         assert_eq!(
             parser::time_range("一時間後"),
             Ok(TimeRangeSpecifier::At(TimeSpecifier::After(
-                HourMinuteSpecifier::Hour(1)
+                AfterTimeSpecifier::Hour(1)
             )))
         );
         assert_eq!(
             parser::time_range("1時間30分後"),
             Ok(TimeRangeSpecifier::At(TimeSpecifier::After(
-                HourMinuteSpecifier::Both(1, 30)
+                AfterTimeSpecifier::HourMinute(1, 30)
             )))
         );
     }
@@ -498,44 +491,47 @@ mod tests {
     fn test_by_ja() {
         assert_eq!(
             parser::time_range("12:12まで"),
-            Ok(TimeRangeSpecifier::By(TimeSpecifier::At {
-                time: HourMinuteSpecifier::Both(
-                    Hour::from_u8(12).unwrap(),
-                    Minute::from_u8(12).unwrap()
-                ),
-                is_tomorrow: false
-            }))
+            Ok(TimeRangeSpecifier::By(TimeSpecifier::At(
+                AtTimeSpecifier::HourMinute {
+                    hour: Hour::from_u8(12).unwrap(),
+                    minute: Minute::from_u8(12).unwrap(),
+                    is_tomorrow: false
+                }
+            )))
         );
         assert_eq!(
             parser::time_range("四十五分まで"),
-            Ok(TimeRangeSpecifier::By(TimeSpecifier::At {
-                time: HourMinuteSpecifier::Minute(Minute::from_u8(45).unwrap()),
-                is_tomorrow: false
-            }))
+            Ok(TimeRangeSpecifier::By(TimeSpecifier::At(
+                AtTimeSpecifier::Minute(Minute::from_u8(45).unwrap())
+            )),)
         );
         assert_eq!(
             parser::time_range("十二時まで"),
-            Ok(TimeRangeSpecifier::By(TimeSpecifier::At {
-                time: HourMinuteSpecifier::Hour(Hour::from_u8(12).unwrap()),
-                is_tomorrow: false
-            }))
+            Ok(TimeRangeSpecifier::By(TimeSpecifier::At(
+                AtTimeSpecifier::Hour {
+                    hour: Hour::from_u8(12).unwrap(),
+                    is_tomorrow: false
+                }
+            )))
         );
         assert_eq!(
             parser::time_range("明日の1時まで"),
-            Ok(TimeRangeSpecifier::By(TimeSpecifier::At {
-                time: HourMinuteSpecifier::Hour(Hour::from_u8(1).unwrap()),
-                is_tomorrow: true
-            }))
+            Ok(TimeRangeSpecifier::By(TimeSpecifier::At(
+                AtTimeSpecifier::Hour {
+                    hour: Hour::from_u8(1).unwrap(),
+                    is_tomorrow: true
+                }
+            )))
         );
         assert_eq!(
             parser::time_range("明日の三時二十二分まで"),
-            Ok(TimeRangeSpecifier::By(TimeSpecifier::At {
-                time: HourMinuteSpecifier::Both(
-                    Hour::from_u8(3).unwrap(),
-                    Minute::from_u8(22).unwrap()
-                ),
-                is_tomorrow: true
-            }))
+            Ok(TimeRangeSpecifier::By(TimeSpecifier::At(
+                AtTimeSpecifier::HourMinute {
+                    hour: Hour::from_u8(3).unwrap(),
+                    minute: Minute::from_u8(22).unwrap(),
+                    is_tomorrow: true
+                }
+            )))
         );
     }
 
@@ -544,19 +540,19 @@ mod tests {
         assert_eq!(
             parser::time_range("九十分後まで"),
             Ok(TimeRangeSpecifier::By(TimeSpecifier::After(
-                HourMinuteSpecifier::Minute(90)
+                AfterTimeSpecifier::Minute(90)
             )))
         );
         assert_eq!(
             parser::time_range("11時間後まで"),
             Ok(TimeRangeSpecifier::By(TimeSpecifier::After(
-                HourMinuteSpecifier::Hour(11)
+                AfterTimeSpecifier::Hour(11)
             )))
         );
         assert_eq!(
             parser::time_range("90分以内"),
             Ok(TimeRangeSpecifier::By(TimeSpecifier::After(
-                HourMinuteSpecifier::Minute(90)
+                AfterTimeSpecifier::Minute(90)
             )))
         );
     }
@@ -565,24 +561,24 @@ mod tests {
     fn test_at_en() {
         assert_eq!(
             parser::time_range("at 12:00"),
-            Ok(TimeRangeSpecifier::At(TimeSpecifier::At {
-                time: HourMinuteSpecifier::Both(
-                    Hour::from_u8(12).unwrap(),
-                    Minute::from_u8(00).unwrap()
-                ),
-                is_tomorrow: false
-            }))
+            Ok(TimeRangeSpecifier::At(TimeSpecifier::At(
+                AtTimeSpecifier::HourMinute {
+                    hour: Hour::from_u8(12).unwrap(),
+                    minute: Minute::from_u8(00).unwrap(),
+                    is_tomorrow: false
+                }
+            )))
         );
         assert!(parser::time_range("at 30:00").is_err());
         assert_eq!(
             parser::time_range("at 10:15 tomorrow"),
-            Ok(TimeRangeSpecifier::At(TimeSpecifier::At {
-                time: HourMinuteSpecifier::Both(
-                    Hour::from_u8(10).unwrap(),
-                    Minute::from_u8(15).unwrap()
-                ),
-                is_tomorrow: true
-            }))
+            Ok(TimeRangeSpecifier::At(TimeSpecifier::At(
+                AtTimeSpecifier::HourMinute {
+                    hour: Hour::from_u8(10).unwrap(),
+                    minute: Minute::from_u8(15).unwrap(),
+                    is_tomorrow: true
+                }
+            )))
         );
     }
 
@@ -591,19 +587,19 @@ mod tests {
         assert_eq!(
             parser::time_range("after 90min"),
             Ok(TimeRangeSpecifier::At(TimeSpecifier::After(
-                HourMinuteSpecifier::Minute(90)
+                AfterTimeSpecifier::Minute(90)
             )))
         );
         assert_eq!(
             parser::time_range("after 1h"),
             Ok(TimeRangeSpecifier::At(TimeSpecifier::After(
-                HourMinuteSpecifier::Hour(1)
+                AfterTimeSpecifier::Hour(1)
             )))
         );
         assert_eq!(
             parser::time_range("after 1h30m"),
             Ok(TimeRangeSpecifier::At(TimeSpecifier::After(
-                HourMinuteSpecifier::Both(1, 30)
+                AfterTimeSpecifier::HourMinute(1, 30)
             )))
         );
     }
@@ -612,23 +608,23 @@ mod tests {
     fn test_by_en() {
         assert_eq!(
             parser::time_range("by 12:12"),
-            Ok(TimeRangeSpecifier::By(TimeSpecifier::At {
-                time: HourMinuteSpecifier::Both(
-                    Hour::from_u8(12).unwrap(),
-                    Minute::from_u8(12).unwrap()
-                ),
-                is_tomorrow: false
-            }))
+            Ok(TimeRangeSpecifier::By(TimeSpecifier::At(
+                AtTimeSpecifier::HourMinute {
+                    hour: Hour::from_u8(12).unwrap(),
+                    minute: Minute::from_u8(12).unwrap(),
+                    is_tomorrow: false
+                }
+            )))
         );
         assert_eq!(
             parser::time_range("by 23:25 tomorrow"),
-            Ok(TimeRangeSpecifier::By(TimeSpecifier::At {
-                time: HourMinuteSpecifier::Both(
-                    Hour::from_u8(23).unwrap(),
-                    Minute::from_u8(25).unwrap()
-                ),
-                is_tomorrow: true
-            }))
+            Ok(TimeRangeSpecifier::By(TimeSpecifier::At(
+                AtTimeSpecifier::HourMinute {
+                    hour: Hour::from_u8(23).unwrap(),
+                    minute: Minute::from_u8(25).unwrap(),
+                    is_tomorrow: true
+                }
+            )))
         );
     }
 
@@ -637,19 +633,19 @@ mod tests {
         assert_eq!(
             parser::time_range("within 90m"),
             Ok(TimeRangeSpecifier::By(TimeSpecifier::After(
-                HourMinuteSpecifier::Minute(90)
+                AfterTimeSpecifier::Minute(90)
             )))
         );
         assert_eq!(
             parser::time_range("within 11hr"),
             Ok(TimeRangeSpecifier::By(TimeSpecifier::After(
-                HourMinuteSpecifier::Hour(11)
+                AfterTimeSpecifier::Hour(11)
             )))
         );
         assert_eq!(
             parser::time_range("within 90 minute"),
             Ok(TimeRangeSpecifier::By(TimeSpecifier::After(
-                HourMinuteSpecifier::Minute(90)
+                AfterTimeSpecifier::Minute(90)
             )))
         );
     }
