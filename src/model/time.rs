@@ -1,4 +1,4 @@
-use chrono::{DateTime, Duration, FixedOffset, TimeZone, Utc};
+use chrono::{DateTime, Duration, FixedOffset, TimeZone, Timelike, Utc};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Error)]
@@ -128,7 +128,8 @@ impl TimeSpecifier {
         match self {
             TimeSpecifier::After(dur) => now + dur.calculate_duration(),
             TimeSpecifier::At(time) => {
-                let now_date = now.with_timezone(&tz).date();
+                let now = now.with_timezone(&tz);
+                let now_date = now.date();
                 match time {
                     AtTimeSpecifier::Hour { hour, is_tomorrow } => {
                         let t = now_date.and_hms(hour.as_u32(), 0, 0);
@@ -138,7 +139,7 @@ impl TimeSpecifier {
                             t
                         }
                     }
-                    AtTimeSpecifier::Minute(m) => now_date.and_hms(0, m.as_u32(), 0),
+                    AtTimeSpecifier::Minute(m) => now_date.and_hms(now.hour(), m.as_u32(), 0),
                     AtTimeSpecifier::HourMinute {
                         hour,
                         minute,
@@ -177,7 +178,7 @@ impl TimeSpecifier {
 mod tests {
     use super::{AfterTimeSpecifier, AtTimeSpecifier, Hour, Minute, TimeSpecifier};
 
-    use chrono::{Duration, FixedOffset, Utc};
+    use chrono::{Duration, FixedOffset, Timelike, Utc};
 
     #[test]
     fn test_calculate_time_after() {
@@ -198,6 +199,16 @@ mod tests {
         });
         let expected = now.date().and_hms(12, 35, 0);
         assert_eq!(spec.calculate_time(now, Utc), expected);
+    }
+
+    #[test]
+    fn test_calculate_time_at_minute() {
+        let tz = FixedOffset::east(9 * 3600);
+        let now_utc = Utc::now();
+        let now = now_utc.with_timezone(&tz);
+        let spec = TimeSpecifier::At(AtTimeSpecifier::Minute(Minute::from_u8(35).unwrap()));
+        let expected = now.date().and_hms(now.hour(), 35, 0);
+        assert_eq!(spec.calculate_time(now_utc, tz), expected);
     }
 
     #[test]
