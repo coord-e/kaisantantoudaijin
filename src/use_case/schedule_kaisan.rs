@@ -13,7 +13,7 @@ use serenity::model::{
     id::{ChannelId, UserId},
     permissions::Permissions,
 };
-use tokio::{spawn, time};
+use tokio::spawn;
 
 #[async_trait::async_trait]
 pub trait ScheduleKaisan:
@@ -141,10 +141,7 @@ fn schedule_kaisan_at<C: ScheduleKaisan + Send + Sync>(
     kaisanee: KaisaneeSpecifier,
 ) {
     spawn(async move {
-        let now = ctx.current_time();
-        if let Ok(duration) = (time - now).to_std() {
-            time::delay_for(duration).await;
-        }
+        ctx.delay_until(time).await;
 
         if let Err(e) = kaisan(&ctx, voice_channel_id, &kaisanee).await {
             error!("failed to kaisan: {}", &e);
@@ -161,10 +158,7 @@ fn schedule_reminder_at<C: ScheduleKaisan + Sync>(
     reminder: Reminder,
 ) {
     spawn(async move {
-        let now = ctx.current_time();
-        if let Ok(duration) = (remind_time - now).to_std() {
-            time::delay_for(duration).await;
-        }
+        ctx.delay_until(remind_time).await;
 
         if let Err(e) = remind(&ctx, voice_channel_id, &kaisanee, reminder).await {
             error!("failed to remind: {}", &e);

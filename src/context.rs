@@ -229,9 +229,17 @@ impl RandomContext for Context {
     }
 }
 
+#[async_trait::async_trait]
 impl TimeContext for Context {
     fn current_time(&self) -> DateTime<Utc> {
         Utc::now()
+    }
+
+    async fn delay_until(&self, time: DateTime<Utc>) {
+        let now = self.current_time();
+        if let Ok(duration) = (time - now).to_std() {
+            tokio::time::delay_for(duration).await;
+        }
     }
 }
 
