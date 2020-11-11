@@ -14,4 +14,6 @@ pub trait SettingContext {
     async fn reminders(&self) -> Result<HashSet<Reminder>>;
     async fn add_reminder(&self, reminder: Reminder) -> Result<bool>;
     async fn remove_reminder(&self, reminder: Reminder) -> Result<bool>;
+    async fn reminds_random_kaisan(&self) -> Result<bool>;
+    async fn set_reminds_random_kaisan(&self, reminds_random_kaisan: bool) -> Result<()>;
 }

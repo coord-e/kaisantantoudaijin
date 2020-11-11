@@ -135,6 +135,17 @@ impl Context {
             .context("cannot write to redis")?;
         Ok(n != 0)
     }
+
+    async fn redis_flag_get(&self, key: &str, default: bool) -> Result<bool> {
+        Ok(match self.redis_get::<u32>(key).await? {
+            None => default,
+            Some(r) => r != 0,
+        })
+    }
+
+    async fn redis_flag_set(&self, key: &str, flag: bool) -> Result<()> {
+        self.redis_set(key, flag as u32).await
+    }
 }
 
 impl BotContext for Context {
@@ -257,15 +268,12 @@ impl SettingContext for Context {
     }
 
     async fn set_requires_permission(&self, requires_permission: bool) -> Result<()> {
-        self.redis_set("requires_permission", requires_permission as u32)
+        self.redis_flag_set("requires_permission", requires_permission)
             .await
     }
 
     async fn requires_permission(&self) -> Result<bool> {
-        Ok(match self.redis_get::<u32>("requires_permission").await? {
-            None => true,
-            Some(r) => r != 0,
-        })
+        self.redis_flag_get("requires_permission", true).await
     }
 
     async fn reminders(&self) -> Result<HashSet<Reminder>> {
@@ -278,6 +286,15 @@ impl SettingContext for Context {
 
     async fn remove_reminder(&self, reminder: Reminder) -> Result<bool> {
         self.redis_set_remove("reminders", reminder).await
+    }
+
+    async fn reminds_random_kaisan(&self) -> Result<bool> {
+        self.redis_flag_get("reminds_random_kaisan", false).await
+    }
+
+    async fn set_reminds_random_kaisan(&self, reminds_random_kaisan: bool) -> Result<()> {
+        self.redis_flag_set("reminds_random_kaisan", reminds_random_kaisan)
+            .await
     }
 }
 
@@ -336,6 +353,9 @@ impl Context {
             }
             Command::AddReminder(r) => use_case::AddReminder::add_reminder(self, r).await,
             Command::RemoveReminder(r) => use_case::RemoveReminder::remove_reminder(self, r).await,
+            Command::RemindRandomKaisan(b) => {
+                use_case::SetRemindsRandomKaisan::set_reminds_random_kaisan(self, b).await
+            }
             Command::Kaisan {
                 kaisanee,
                 time_range,

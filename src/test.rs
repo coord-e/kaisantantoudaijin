@@ -57,6 +57,7 @@ pub struct MockContext {
     pub requires_permission: Arc<AtomicBool>,
     pub timezone: Arc<Mutex<Tz>>,
     pub reminders: Arc<Mutex<HashSet<Reminder>>>,
+    pub reminds_random_kaisan: Arc<AtomicBool>,
 }
 
 impl MockContext {
@@ -87,6 +88,7 @@ impl MockContext {
             reminders: Arc::new(Mutex::new(
                 vec![Reminder::before_minutes(5)].into_iter().collect(),
             )),
+            reminds_random_kaisan: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -228,5 +230,15 @@ impl SettingContext for MockContext {
 
     async fn remove_reminder(&self, reminder: Reminder) -> Result<bool> {
         Ok(self.reminders.lock().await.remove(&reminder))
+    }
+
+    async fn set_reminds_random_kaisan(&self, reminds_random_kaisan: bool) -> Result<()> {
+        self.reminds_random_kaisan
+            .store(reminds_random_kaisan, Ordering::SeqCst);
+        Ok(())
+    }
+
+    async fn reminds_random_kaisan(&self) -> Result<bool> {
+        Ok(self.reminds_random_kaisan.load(Ordering::SeqCst))
     }
 }

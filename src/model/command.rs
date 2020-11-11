@@ -30,6 +30,7 @@ pub enum Command {
     RequirePermission(bool),
     AddReminder(Reminder),
     RemoveReminder(Reminder),
+    RemindRandomKaisan(bool),
     Help,
 }
 
@@ -259,6 +260,7 @@ peg::parser! {
       }
       / "add-reminder" _ r:reminder() { Command::AddReminder(r) }
       / "remove-reminder" _ r:reminder() { Command::RemoveReminder(r) }
+      / "remind-random" _ b:boolean() { Command::RemindRandomKaisan(b) }
       / "show-setting" { Command::ShowSetting }
       / kaisanee1:spec_kaisanee()? time_range:time_range() _ (['に'] _)? kaisanee2:spec_kaisanee()? "解散"? {?
           match (kaisanee1, kaisanee2) {

@@ -48,7 +48,7 @@ pub trait ScheduleKaisan:
 
         let now = self.current_time();
         let tz = self.timezone().await?;
-        let time = match time_range {
+        let (time, is_random) = match time_range {
             TimeRangeSpecifier::Now => {
                 return kaisan(self, voice_channel_id, &kaisanee).await;
             }
@@ -68,7 +68,7 @@ pub trait ScheduleKaisan:
                     now: now.with_timezone(&tz),
                 })
                 .await?;
-                time
+                (time, false)
             }
             TimeRangeSpecifier::By(spec) => {
                 let by = spec.calculate_time(now, tz);
@@ -91,7 +91,7 @@ pub trait ScheduleKaisan:
                     now: now.with_timezone(&tz),
                 })
                 .await?;
-                time
+                (time, true)
             }
         };
 
@@ -99,21 +99,23 @@ pub trait ScheduleKaisan:
         schedule_kaisan_at(ctx.clone(), voice_channel_id, time, kaisanee.clone());
         info!("scheduled kaisan for {:?} at {}", kaisanee, time);
 
-        let reminders = self.reminders().await?;
-        for reminder in reminders {
-            let remind_time = time - reminder.before_duration();
-            if remind_time <= now {
-                continue;
-            }
+        if !is_random || self.reminds_random_kaisan().await? {
+            let reminders = self.reminders().await?;
+            for reminder in reminders {
+                let remind_time = time - reminder.before_duration();
+                if remind_time <= now {
+                    continue;
+                }
 
-            schedule_reminder_at(
-                self.clone(),
-                voice_channel_id,
-                remind_time,
-                kaisanee.clone(),
-                reminder,
-            );
-            info!("scheduled remind for {:?} at {}", kaisanee, remind_time);
+                schedule_reminder_at(
+                    self.clone(),
+                    voice_channel_id,
+                    remind_time,
+                    kaisanee.clone(),
+                    reminder,
+                );
+                info!("scheduled remind for {:?} at {}", kaisanee, remind_time);
+            }
         }
 
         Ok(())
@@ -350,6 +352,81 @@ mod tests {
             assert!(users.contains(&MOCK_AUTHOR_1));
             assert!(users.contains(&MOCK_AUTHOR_2));
         }
+    }
+
+    #[tokio::test]
+    async fn test_random() {
+        let time = Utc::now();
+        let ctx = MockContext::with_author_current_time(MOCK_AUTHOR_2, time);
+
+        ctx.schedule_kaisan(
+            KaisaneeSpecifier::All,
+            TimeRangeSpecifier::By(TimeSpecifier::After(AfterTimeSpecifier::Minute(5))),
+        )
+        .await
+        .unwrap();
+
+        ctx.set_current_time(time + Duration::minutes(5));
+        wait_a_little(ctx.wait_for_message(|m| matches!(m, Message::Kaisan(_)))).await;
+
+        {
+            let users = &*ctx.disconnected_users.lock().await;
+            assert!(users.contains(&MOCK_AUTHOR_1));
+            assert!(users.contains(&MOCK_AUTHOR_2));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_random_no_remind() {
+        let time = Utc::now();
+        let ctx = MockContext::with_author_current_time(MOCK_AUTHOR_2, time);
+        ctx.reminds_random_kaisan.store(false, Ordering::SeqCst);
+
+        let reminder = Reminder::before_minutes(2);
+        use_case::AddReminder::add_reminder(&ctx, reminder)
+            .await
+            .unwrap();
+
+        ctx.schedule_kaisan(
+            KaisaneeSpecifier::All,
+            TimeRangeSpecifier::By(TimeSpecifier::After(AfterTimeSpecifier::Minute(10))),
+        )
+        .await
+        .unwrap();
+
+        ctx.set_current_time(time + Duration::minutes(10));
+        wait_a_little(ctx.wait_for_message(|m| matches!(m, Message::Kaisan(_)))).await;
+
+        let messages = ctx.sent_messages.lock().await.clone();
+        assert!(messages
+            .into_iter()
+            .find(|m| matches!(m, Message::Remind(_, r) if r == &reminder))
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn test_random_remind() {
+        let time = Utc::now();
+        let ctx = MockContext::with_author_current_time(MOCK_AUTHOR_2, time);
+        ctx.reminds_random_kaisan.store(true, Ordering::SeqCst);
+
+        let reminder = Reminder::before_minutes(2);
+        use_case::AddReminder::add_reminder(&ctx, reminder)
+            .await
+            .unwrap();
+
+        ctx.schedule_kaisan(
+            KaisaneeSpecifier::All,
+            TimeRangeSpecifier::By(TimeSpecifier::After(AfterTimeSpecifier::Minute(10))),
+        )
+        .await
+        .unwrap();
+
+        ctx.set_current_time(time + Duration::minutes(8));
+        wait_a_little(
+            ctx.wait_for_message(|m| matches!(m, Message::Remind(_, r) if r == &reminder)),
+        )
+        .await;
     }
 
     #[tokio::test]

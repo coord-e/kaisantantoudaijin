@@ -26,6 +26,7 @@ pub enum Message {
         requires_permission: bool,
         timezone: Tz,
         reminders: HashSet<Reminder>,
+        reminds_random_kaisan: bool,
     },
     HandleError(Error),
     KaisanError(Error),
@@ -100,6 +101,7 @@ impl Display for Message {
                 requires_permission,
                 timezone,
                 reminders,
+                reminds_random_kaisan,
             } => {
                 writeln!(
                     f,
@@ -125,6 +127,16 @@ impl Display for Message {
                 } else {
                     f.write_str("設定されていません")?;
                 }
+
+                writeln!(
+                    f,
+                    "\n解散時刻がランダムな場合にもリマインダを使う: {}",
+                    if *reminds_random_kaisan {
+                        "はい"
+                    } else {
+                        "いいえ"
+                    }
+                )?;
 
                 Ok(())
             }
