@@ -11,7 +11,7 @@ use chrono::{DateTime, Datelike, Duration, TimeZone, Timelike};
 use chrono_tz::Tz;
 use serenity::model::{id::UserId, misc::Mentionable};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Message {
     Help,
     Scheduled {

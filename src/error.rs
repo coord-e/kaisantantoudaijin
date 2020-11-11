@@ -1,10 +1,12 @@
+use std::sync::Arc;
+
 use crate::model::{command::ParseCommandError, reminder::Reminder};
 
 use chrono::{DateTime, Utc};
 use serenity::model::permissions::Permissions;
 use thiserror::Error;
 
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 pub enum Error {
     #[error("could not access to the target guild")]
     InaccessibleGuild,
@@ -24,7 +26,13 @@ pub enum Error {
     #[error("reminder for {} already exists", .0.before_duration())]
     DuplicatedReminders(Reminder),
     #[error(transparent)]
-    Other(#[from] anyhow::Error),
+    Other(Arc<anyhow::Error>),
+}
+
+impl From<anyhow::Error> for Error {
+    fn from(err: anyhow::Error) -> Error {
+        Error::Other(Arc::new(err))
+    }
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
