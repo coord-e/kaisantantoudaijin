@@ -58,6 +58,9 @@ impl Display for Message {
 ・`!kaisan show-setting`: 設定表示
 ・`!kaisan timezone TIMEZONE`: タイムゾーンを設定
 ・`!kaisan require-permission BOOLEAN`: 他人を解散するのに Move Members 権限を必要とするか設定
+・`!kaisan add-reminder N`: 解散の `N` 分前にリマインドを設定
+・`!kaisan remove-reminder N`: 解散の `N` 分前のリマインドを削除
+・`!kaisan remind-random BOOLEAN`: 解散時刻がランダムな場合にもリマインダを使うかどうか設定
 ",
             ),
             Message::Scheduled {
