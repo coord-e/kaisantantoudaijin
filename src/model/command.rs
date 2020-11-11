@@ -275,6 +275,7 @@ mod tests {
     use super::{parser, Command, TimeRangeSpecifier};
     use crate::model::{
         kaisanee::KaisaneeSpecifier,
+        reminder::Reminder,
         time::{AfterTimeSpecifier, AtTimeSpecifier, Hour, Minute, TimeSpecifier},
     };
 
@@ -304,6 +305,14 @@ mod tests {
         assert_eq!(
             parser::command("require-permission no"),
             Ok(Command::RequirePermission(false))
+        );
+        assert_eq!(
+            parser::command("add-reminder 三分前"),
+            Ok(Command::AddReminder(Reminder::before_minutes(3)))
+        );
+        assert_eq!(
+            parser::command("remove-reminder before 20m"),
+            Ok(Command::RemoveReminder(Reminder::before_minutes(20)))
         );
         assert_eq!(parser::command("show-setting"), Ok(Command::ShowSetting));
     }

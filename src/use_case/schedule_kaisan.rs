@@ -237,13 +237,17 @@ mod tests {
     use crate::{
         error::Error,
         model::{
-            command::TimeRangeSpecifier, kaisanee::KaisaneeSpecifier, message::Message,
-            time::TimeSpecifier,
+            command::TimeRangeSpecifier,
+            kaisanee::KaisaneeSpecifier,
+            message::Message,
+            reminder::Reminder,
+            time::{AfterTimeSpecifier, TimeSpecifier},
         },
         test::{MockContext, MOCK_AUTHOR_1, MOCK_AUTHOR_2},
+        use_case,
     };
-    use chrono::{FixedOffset, Utc};
-    use std::{sync::atomic::Ordering, time::Duration};
+    use chrono::{Duration, FixedOffset, Utc};
+    use std::sync::atomic::Ordering;
 
     #[tokio::test]
     async fn test_all() {
@@ -253,47 +257,37 @@ mod tests {
             .await
             .unwrap();
 
-        // TODO: more reliable way to wait for change
-        tokio::time::delay_for(Duration::from_millis(200)).await;
+        ctx.set_current_time(Utc::now() + Duration::seconds(1));
+        wait_a_little(ctx.wait_for_message(|m| matches!(m, Message::Kaisan(_)))).await;
 
         {
             let users = &*ctx.disconnected_users.lock().await;
             assert!(users.contains(&MOCK_AUTHOR_1));
             assert!(users.contains(&MOCK_AUTHOR_2));
         }
-
-        {
-            let messages = &*ctx.sent_messages.lock().await;
-            assert!(messages
-                .iter()
-                .find(|m| matches!(m, Message::Kaisan(_)))
-                .is_some());
-        }
     }
 
     #[tokio::test]
     async fn test_me() {
-        let ctx = MockContext::with_author(MOCK_AUTHOR_2);
+        let time = Utc::now();
+        let ctx = MockContext::with_author_current_time(MOCK_AUTHOR_2, time);
 
-        ctx.schedule_kaisan(KaisaneeSpecifier::Me, TimeRangeSpecifier::Now)
-            .await
-            .unwrap();
+        ctx.schedule_kaisan(
+            KaisaneeSpecifier::Me,
+            TimeRangeSpecifier::At(TimeSpecifier::Exactly(
+                time.with_timezone(&FixedOffset::east(0)) + Duration::minutes(10),
+            )),
+        )
+        .await
+        .unwrap();
 
-        // TODO: more reliable way to wait for change
-        tokio::time::delay_for(Duration::from_millis(200)).await;
+        ctx.set_current_time(time + Duration::minutes(10));
+        wait_a_little(ctx.wait_for_message(|m| matches!(m, Message::Kaisan(_)))).await;
 
         {
             let users = &*ctx.disconnected_users.lock().await;
             assert!(!users.contains(&MOCK_AUTHOR_1));
             assert!(users.contains(&MOCK_AUTHOR_2));
-        }
-
-        {
-            let messages = &*ctx.sent_messages.lock().await;
-            assert!(messages
-                .iter()
-                .find(|m| matches!(m, Message::Kaisan(_)))
-                .is_some());
         }
     }
 
@@ -316,6 +310,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_reminders() {
+        let time = Utc::now();
+        let ctx = MockContext::with_author_current_time(MOCK_AUTHOR_2, time);
+
+        let reminder1 = Reminder::before_minutes(3);
+        use_case::AddReminder::add_reminder(&ctx, reminder1)
+            .await
+            .unwrap();
+        let reminder2 = Reminder::before_minutes(1);
+        use_case::AddReminder::add_reminder(&ctx, reminder2)
+            .await
+            .unwrap();
+
+        ctx.schedule_kaisan(
+            KaisaneeSpecifier::All,
+            TimeRangeSpecifier::At(TimeSpecifier::After(AfterTimeSpecifier::Minute(5))),
+        )
+        .await
+        .unwrap();
+
+        ctx.set_current_time(time + Duration::minutes(2));
+        wait_a_little(
+            ctx.wait_for_message(|m| matches!(m, Message::Remind(_, r) if r == &reminder1)),
+        )
+        .await;
+
+        ctx.set_current_time(time + Duration::minutes(4));
+        wait_a_little(
+            ctx.wait_for_message(|m| matches!(m, Message::Remind(_, r) if r == &reminder2)),
+        )
+        .await;
+
+        ctx.set_current_time(time + Duration::minutes(5));
+        wait_a_little(ctx.wait_for_message(|m| matches!(m, Message::Kaisan(_)))).await;
+
+        {
+            let users = &*ctx.disconnected_users.lock().await;
+            assert!(users.contains(&MOCK_AUTHOR_1));
+            assert!(users.contains(&MOCK_AUTHOR_2));
+        }
+    }
+
+    #[tokio::test]
     async fn test_insufficient_permission() {
         let ctx = MockContext::with_author(MOCK_AUTHOR_1);
         ctx.requires_permission.store(true, Ordering::SeqCst);
@@ -335,5 +372,11 @@ mod tests {
             .schedule_kaisan(KaisaneeSpecifier::All, TimeRangeSpecifier::Now)
             .await;
         assert!(matches!(res, Ok(())));
+    }
+
+    async fn wait_a_little<F: std::future::Future>(future: F) {
+        tokio::time::timeout(std::time::Duration::from_millis(100), future)
+            .await
+            .unwrap();
     }
 }

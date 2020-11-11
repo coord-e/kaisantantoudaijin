@@ -25,3 +25,41 @@ pub trait RemoveReminder: SettingContext + GuildContext + MessageContext {
 }
 
 impl<T: SettingContext + GuildContext + MessageContext> RemoveReminder for T {}
+
+#[cfg(test)]
+mod tests {
+    use super::RemoveReminder;
+    use crate::{
+        error::Error,
+        model::reminder::Reminder,
+        test::{MockContext, MOCK_AUTHOR_1, MOCK_AUTHOR_2},
+    };
+
+    #[tokio::test]
+    async fn test_success() {
+        let ctx = MockContext::with_author(MOCK_AUTHOR_2);
+        let reminder = Reminder::before_minutes(5);
+        ctx.remove_reminder(reminder).await.unwrap();
+        assert!(!ctx.reminders.lock().await.contains(&reminder));
+    }
+
+    #[tokio::test]
+    async fn test_not_found() {
+        let ctx = MockContext::with_author(MOCK_AUTHOR_2);
+        let reminder = Reminder::before_minutes(10);
+        let _ = ctx.remove_reminder(reminder).await;
+        assert!(matches!(
+            ctx.remove_reminder(reminder).await,
+            Err(Error::NoSuchReminder(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_insufficient_permission() {
+        let ctx = MockContext::with_author(MOCK_AUTHOR_1);
+        assert!(matches!(
+            ctx.remove_reminder(Reminder::before_minutes(5)).await,
+            Err(Error::InsufficientPermission(_))
+        ));
+    }
+}

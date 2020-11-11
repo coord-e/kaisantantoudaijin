@@ -36,11 +36,13 @@ mod tests {
         let ctx = MockContext::new();
         let perm = ctx.requires_permission.load(Ordering::SeqCst);
         let tz = *ctx.timezone.lock().await;
+        let rms = ctx.reminders.lock().await.clone();
         ctx.show_setting().await.unwrap();
 
         assert!(matches!(
             ctx.sent_messages.lock().await.as_slice(),
-            &[Message::Setting { requires_permission, timezone }] if requires_permission == perm && timezone == tz
+            [Message::Setting { requires_permission, timezone, reminders }]
+              if requires_permission == &perm && timezone == &tz && reminders == &rms
         ));
     }
 }
