@@ -1,4 +1,4 @@
-use crate::model::command::ParseCommandError;
+use crate::model::{command::ParseCommandError, reminder::Reminder};
 
 use chrono::{DateTime, Utc};
 use serenity::model::permissions::Permissions;
@@ -19,6 +19,10 @@ pub enum Error {
         specified: DateTime<Utc>,
         at: DateTime<Utc>,
     },
+    #[error("no such reminder for {}", .0.before_duration())]
+    NoSuchReminder(Reminder),
+    #[error("reminder for {} already exists", .0.before_duration())]
+    DuplicatedReminders(Reminder),
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }

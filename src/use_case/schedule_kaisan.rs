@@ -2,7 +2,9 @@ use crate::context::{
     ChannelContext, GuildContext, MessageContext, RandomContext, SettingContext, TimeContext,
 };
 use crate::error::{Error, Result};
-use crate::model::{command::TimeRangeSpecifier, kaisanee::KaisaneeSpecifier, message::Message};
+use crate::model::{
+    command::TimeRangeSpecifier, kaisanee::KaisaneeSpecifier, message::Message, reminder::Reminder,
+};
 
 use chrono::{DateTime, Duration, Utc};
 use futures::future;
@@ -48,7 +50,7 @@ pub trait ScheduleKaisan:
         let tz = self.timezone().await?;
         let time = match time_range {
             TimeRangeSpecifier::Now => {
-                return kaisan(self, author_id, voice_channel_id, kaisanee).await;
+                return kaisan(self, voice_channel_id, &kaisanee).await;
             }
             TimeRangeSpecifier::At(spec) => {
                 let time = spec.calculate_time(now, tz);
@@ -94,9 +96,26 @@ pub trait ScheduleKaisan:
         };
 
         let ctx = self.clone();
-        schedule_kaisan_at(ctx, author_id, voice_channel_id, time, kaisanee.clone());
-
+        schedule_kaisan_at(ctx.clone(), voice_channel_id, time, kaisanee.clone());
         info!("scheduled kaisan for {:?} at {}", kaisanee, time);
+
+        let reminders = self.reminders().await?;
+        for reminder in reminders {
+            let remind_time = time - reminder.before_duration();
+            if remind_time <= now {
+                continue;
+            }
+
+            schedule_reminder_at(
+                self.clone(),
+                voice_channel_id,
+                remind_time,
+                kaisanee.clone(),
+                reminder,
+            );
+            info!("scheduled remind for {:?} at {}", kaisanee, remind_time);
+        }
+
         Ok(())
     }
 }
@@ -117,7 +136,6 @@ impl<
 
 fn schedule_kaisan_at<C: ScheduleKaisan + Send + Sync>(
     ctx: C,
-    author_id: UserId,
     voice_channel_id: ChannelId,
     time: DateTime<Utc>,
     kaisanee: KaisaneeSpecifier,
@@ -128,34 +146,39 @@ fn schedule_kaisan_at<C: ScheduleKaisan + Send + Sync>(
             time::delay_for(duration).await;
         }
 
-        if let Err(e) = kaisan(&ctx, author_id, voice_channel_id, kaisanee).await {
+        if let Err(e) = kaisan(&ctx, voice_channel_id, &kaisanee).await {
             error!("failed to kaisan: {}", &e);
             let _ = future::try_join(ctx.react('❌'), ctx.message(Message::KaisanError(e))).await;
         }
     });
 }
 
-async fn kaisan<C: ScheduleKaisan>(
-    ctx: &C,
-    author_id: UserId,
+fn schedule_reminder_at<C: ScheduleKaisan + Sync>(
+    ctx: C,
     voice_channel_id: ChannelId,
+    remind_time: DateTime<Utc>,
     kaisanee: KaisaneeSpecifier,
-) -> Result<()> {
-    let in_users = ctx.voice_channel_users(voice_channel_id).await?;
+    reminder: Reminder,
+) {
+    spawn(async move {
+        let now = ctx.current_time();
+        if let Ok(duration) = (remind_time - now).to_std() {
+            time::delay_for(duration).await;
+        }
 
-    let target_users = match kaisanee {
-        KaisaneeSpecifier::Me => {
-            if in_users.contains(&author_id) {
-                vec![author_id]
-            } else {
-                vec![]
-            }
+        if let Err(e) = remind(&ctx, voice_channel_id, &kaisanee, reminder).await {
+            error!("failed to remind: {}", &e);
+            let _ = future::try_join(ctx.react('❌'), ctx.message(Message::RemindError(e))).await;
         }
-        KaisaneeSpecifier::All => in_users,
-        KaisaneeSpecifier::Users(users) => {
-            users.into_iter().filter(|u| in_users.contains(u)).collect()
-        }
-    };
+    });
+}
+
+async fn kaisan<C: ScheduleKaisan + Sync>(
+    ctx: &C,
+    voice_channel_id: ChannelId,
+    kaisanee: &KaisaneeSpecifier,
+) -> Result<()> {
+    let target_users = collect_target_users(ctx, voice_channel_id, kaisanee).await?;
 
     let mut futures = Vec::new();
     for user_id in &target_users {
@@ -172,6 +195,46 @@ async fn kaisan<C: ScheduleKaisan>(
     ctx.react('✅').await?;
 
     Ok(())
+}
+
+async fn remind<C: ScheduleKaisan + Sync>(
+    ctx: &C,
+    voice_channel_id: ChannelId,
+    kaisanee: &KaisaneeSpecifier,
+    reminder: Reminder,
+) -> Result<()> {
+    let target_users = collect_target_users(ctx, voice_channel_id, kaisanee).await?;
+
+    if !target_users.is_empty() {
+        ctx.message(Message::Remind(target_users, reminder)).await?;
+    }
+
+    Ok(())
+}
+
+async fn collect_target_users<C: ScheduleKaisan + Sync>(
+    ctx: &C,
+    voice_channel_id: ChannelId,
+    kaisanee: &KaisaneeSpecifier,
+) -> Result<Vec<UserId>> {
+    let in_users = ctx.voice_channel_users(voice_channel_id).await?;
+    let author_id = ctx.author_id();
+
+    Ok(match kaisanee {
+        KaisaneeSpecifier::Me => {
+            if in_users.contains(&author_id) {
+                vec![author_id]
+            } else {
+                vec![]
+            }
+        }
+        KaisaneeSpecifier::All => in_users,
+        KaisaneeSpecifier::Users(users) => users
+            .iter()
+            .filter(|u| in_users.contains(u))
+            .copied()
+            .collect(),
+    })
 }
 
 #[cfg(test)]

@@ -1,8 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 use std::sync::Arc;
 
 use crate::error::{Error, Result};
-use crate::model::command::Command;
+use crate::model::{command::Command, reminder::Reminder};
 use crate::use_case;
 
 use anyhow::Context as _;
@@ -89,6 +90,50 @@ impl Context {
             .await
             .context("cannot write to redis")?;
         Ok(())
+    }
+
+    async fn redis_set_members<T: Eq + Hash + FromRedisValue>(
+        &self,
+        key: &str,
+    ) -> Result<HashSet<T>> {
+        let r = self
+            .redis
+            .lock()
+            .await
+            .smembers(self.redis_key(key))
+            .await
+            .context("cannot read from redis")?;
+        Ok(r)
+    }
+
+    async fn redis_set_add<T: ToRedisArgs + Send + Sync>(
+        &self,
+        key: &str,
+        value: T,
+    ) -> Result<bool> {
+        let n: i32 = self
+            .redis
+            .lock()
+            .await
+            .sadd(self.redis_key(key), value)
+            .await
+            .context("cannot write to redis")?;
+        Ok(n != 0)
+    }
+
+    async fn redis_set_remove<T: ToRedisArgs + Send + Sync>(
+        &self,
+        key: &str,
+        value: T,
+    ) -> Result<bool> {
+        let n: i32 = self
+            .redis
+            .lock()
+            .await
+            .srem(self.redis_key(key), value)
+            .await
+            .context("cannot write to redis")?;
+        Ok(n != 0)
     }
 }
 
@@ -214,6 +259,18 @@ impl SettingContext for Context {
             Some(r) => r != 0,
         })
     }
+
+    async fn reminders(&self) -> Result<HashSet<Reminder>> {
+        self.redis_set_members("reminders").await
+    }
+
+    async fn add_reminder(&self, reminder: Reminder) -> Result<bool> {
+        self.redis_set_add("reminders", reminder).await
+    }
+
+    async fn remove_reminder(&self, reminder: Reminder) -> Result<bool> {
+        self.redis_set_remove("reminders", reminder).await
+    }
 }
 
 impl Context {
@@ -269,6 +326,8 @@ impl Context {
             Command::RequirePermission(b) => {
                 use_case::SetRequiresPermission::set_requires_permission(self, b).await
             }
+            Command::AddReminder(r) => use_case::AddReminder::add_reminder(self, r).await,
+            Command::RemoveReminder(r) => use_case::RemoveReminder::remove_reminder(self, r).await,
             Command::Kaisan {
                 kaisanee,
                 time_range,
