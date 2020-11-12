@@ -8,6 +8,7 @@ use serenity::model::id::UserId;
 
 use crate::model::{
     kaisanee::KaisaneeSpecifier,
+    reminder::Reminder,
     time::{AfterTimeSpecifier, AtTimeSpecifier, Hour, Minute, TimeSpecifier},
 };
 
@@ -27,6 +28,9 @@ pub enum Command {
     ShowSetting,
     TimeZone(Tz),
     RequirePermission(bool),
+    AddReminder(Reminder),
+    RemoveReminder(Reminder),
+    RemindRandomKaisan(bool),
     Help,
 }
 
@@ -238,6 +242,10 @@ peg::parser! {
       / "after" _ spec:spec_after() { TimeRangeSpecifier::At(spec) }
       / "within" _ spec:spec_after() { TimeRangeSpecifier::By(spec) }
 
+    pub rule reminder() -> Reminder
+        = m:number() _ "分前"? { Reminder::before_minutes(m.into()) }
+        / "before" _ m:number() _ minute_suffix() { Reminder::before_minutes(m.into()) }
+
     rule spec_kaisanee() -> KaisaneeSpecifier
        = k:kaisanee() _ (['を'] _)? { k }
 
@@ -250,6 +258,9 @@ peg::parser! {
               Err(_) => Err("timezone")
           }
       }
+      / "add-reminder" _ r:reminder() { Command::AddReminder(r) }
+      / "remove-reminder" _ r:reminder() { Command::RemoveReminder(r) }
+      / "remind-random" _ b:boolean() { Command::RemindRandomKaisan(b) }
       / "show-setting" { Command::ShowSetting }
       / kaisanee1:spec_kaisanee()? time_range:time_range() _ (['に'] _)? kaisanee2:spec_kaisanee()? "解散"? {?
           match (kaisanee1, kaisanee2) {
@@ -266,6 +277,7 @@ mod tests {
     use super::{parser, Command, TimeRangeSpecifier};
     use crate::model::{
         kaisanee::KaisaneeSpecifier,
+        reminder::Reminder,
         time::{AfterTimeSpecifier, AtTimeSpecifier, Hour, Minute, TimeSpecifier},
     };
 
@@ -295,6 +307,14 @@ mod tests {
         assert_eq!(
             parser::command("require-permission no"),
             Ok(Command::RequirePermission(false))
+        );
+        assert_eq!(
+            parser::command("add-reminder 三分前"),
+            Ok(Command::AddReminder(Reminder::before_minutes(3)))
+        );
+        assert_eq!(
+            parser::command("remove-reminder before 20m"),
+            Ok(Command::RemoveReminder(Reminder::before_minutes(20)))
         );
         assert_eq!(parser::command("show-setting"), Ok(Command::ShowSetting));
     }

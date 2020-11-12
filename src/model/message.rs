@@ -1,15 +1,17 @@
+use std::collections::HashSet;
 use std::fmt::{self, Display};
 
 use crate::error::Error;
-use crate::model::command::TimeRangeSpecifier;
-use crate::model::kaisanee::KaisaneeSpecifier;
-use crate::model::time::TimeSpecifier;
+use crate::model::{
+    command::TimeRangeSpecifier, kaisanee::KaisaneeSpecifier, reminder::Reminder,
+    time::TimeSpecifier,
+};
 
-use chrono::{DateTime, Datelike, TimeZone, Timelike};
+use chrono::{DateTime, Datelike, Duration, TimeZone, Timelike};
 use chrono_tz::Tz;
 use serenity::model::{id::UserId, misc::Mentionable};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Message {
     Help,
     Scheduled {
@@ -19,12 +21,16 @@ pub enum Message {
         now: DateTime<Tz>,
     },
     Kaisan(Vec<UserId>),
+    Remind(Vec<UserId>, Reminder),
     Setting {
         requires_permission: bool,
         timezone: Tz,
+        reminders: HashSet<Reminder>,
+        reminds_random_kaisan: bool,
     },
     HandleError(Error),
     KaisanError(Error),
+    RemindError(Error),
 }
 
 impl Display for Message {
@@ -52,6 +58,9 @@ impl Display for Message {
 ・`!kaisan show-setting`: 設定表示
 ・`!kaisan timezone TIMEZONE`: タイムゾーンを設定
 ・`!kaisan require-permission BOOLEAN`: 他人を解散するのに Move Members 権限を必要とするか設定
+・`!kaisan add-reminder N`: 解散の `N` 分前にリマインドを設定
+・`!kaisan remove-reminder N`: 解散の `N` 分前のリマインドを削除
+・`!kaisan remind-random BOOLEAN`: 解散時刻がランダムな場合にもリマインダを使うかどうか設定
 ",
             ),
             Message::Scheduled {
@@ -83,9 +92,19 @@ impl Display for Message {
                 }
                 f.write_str("解散！")
             }
+            Message::Remind(ids, reminder) => {
+                for id in ids {
+                    write!(f, "{} ", id.mention())?;
+                }
+                write!(f, "あと")?;
+                fmt_duration(f, reminder.before_duration())?;
+                write!(f, "で解散です")
+            }
             Message::Setting {
                 requires_permission,
                 timezone,
+                reminders,
+                reminds_random_kaisan,
             } => {
                 writeln!(
                     f,
@@ -97,11 +116,40 @@ impl Display for Message {
                     }
                 )?;
                 writeln!(f, "タイムゾーン: {}", timezone.name())?;
+
+                f.write_str("リマインダ: ")?;
+                let mut reminders = reminders.iter();
+                if let Some(head) = reminders.next() {
+                    fmt_duration(f, head.before_duration())?;
+                    write!(f, "前")?;
+                    for m in reminders {
+                        write!(f, "、")?;
+                        fmt_duration(f, m.before_duration())?;
+                        write!(f, "前")?;
+                    }
+                } else {
+                    f.write_str("設定されていません")?;
+                }
+
+                writeln!(
+                    f,
+                    "\n解散時刻がランダムな場合にもリマインダを使う: {}",
+                    if *reminds_random_kaisan {
+                        "はい"
+                    } else {
+                        "いいえ"
+                    }
+                )?;
+
                 Ok(())
             }
             Message::HandleError(e) => fmt_error(f, e),
             Message::KaisanError(e) => {
                 f.write_str("解散できませんでした: ")?;
+                fmt_error(f, e)
+            }
+            Message::RemindError(e) => {
+                f.write_str("リマインドできませんでした: ")?;
                 fmt_error(f, e)
             }
         }
@@ -114,6 +162,8 @@ fn fmt_error(f: &mut fmt::Formatter, e: &Error) -> fmt::Result {
         Error::InvalidCommand(_) => f.write_str("コマンドがわからない"),
         Error::UnreachableTime { .. } => f.write_str("過去を変えることはできない"),
         Error::InsufficientPermission(p) => write!(f, "{} の権限が必要です", p),
+        Error::NoSuchReminder(_) => f.write_str("そんなリマインダはない"),
+        Error::DuplicatedReminders(_) => f.write_str("それはすでにある"),
         _ => f.write_str("ダメそう"),
     }
 }
@@ -143,15 +193,19 @@ fn fmt_datetime_when<T: TimeZone>(
     }
 
     if spec.is_interested_in_duration() {
-        let duration = time - now;
-        if duration.num_hours() != 0 {
-            write!(f, "{}時間", duration.num_hours())?;
-        }
-        if duration.num_minutes() != 0 || duration.num_hours() == 0 {
-            write!(f, "{}分", duration.num_minutes() % 60)?;
-        }
+        fmt_duration(f, time - now)?;
         write!(f, "後")?;
     }
 
+    Ok(())
+}
+
+fn fmt_duration(f: &mut fmt::Formatter, duration: Duration) -> fmt::Result {
+    if duration.num_hours() != 0 {
+        write!(f, "{}時間", duration.num_hours())?;
+    }
+    if duration.num_minutes() != 0 || duration.num_hours() == 0 {
+        write!(f, "{}分", duration.num_minutes() % 60)?;
+    }
     Ok(())
 }

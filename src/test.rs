@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -9,7 +9,7 @@ use crate::context::{
     TimeContext,
 };
 use crate::error::Result;
-use crate::model::message::Message;
+use crate::model::{message::Message, reminder::Reminder};
 
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
@@ -19,6 +19,7 @@ use serenity::model::{
     id::{ChannelId, UserId},
     permissions::Permissions,
 };
+use tokio::sync::{watch, Notify};
 
 pub const MOCK_BOT_ID: UserId = UserId(6455241911587596288);
 pub const MOCK_CHANNEL_ID: ChannelId = ChannelId(7933013268500803584);
@@ -47,12 +48,16 @@ lazy_static::lazy_static! {
 #[derive(Clone)]
 pub struct MockContext {
     pub author_id: UserId,
-    pub current_time: DateTime<Utc>,
+    pub current_time_tx: Arc<watch::Sender<DateTime<Utc>>>,
+    pub current_time_rx: watch::Receiver<DateTime<Utc>>,
     pub sent_messages: Arc<Mutex<Vec<Message>>>,
+    pub message_sent: Arc<Notify>,
     pub disconnected_users: Arc<Mutex<Vec<UserId>>>,
     pub added_reactions: Arc<Mutex<Vec<ReactionType>>>,
     pub requires_permission: Arc<AtomicBool>,
     pub timezone: Arc<Mutex<Tz>>,
+    pub reminders: Arc<Mutex<HashSet<Reminder>>>,
+    pub reminds_random_kaisan: Arc<AtomicBool>,
 }
 
 impl MockContext {
@@ -69,14 +74,38 @@ impl MockContext {
     }
 
     pub fn with_author_current_time(author_id: UserId, current_time: DateTime<Utc>) -> MockContext {
+        let (tx, rx) = watch::channel(current_time);
         MockContext {
             author_id,
-            current_time,
+            current_time_tx: Arc::new(tx),
+            current_time_rx: rx,
             sent_messages: Arc::new(Mutex::new(Vec::new())),
+            message_sent: Arc::new(Notify::new()),
             disconnected_users: Arc::new(Mutex::new(Vec::new())),
             added_reactions: Arc::new(Mutex::new(Vec::new())),
             requires_permission: Arc::new(AtomicBool::new(true)),
             timezone: Arc::new(Mutex::new(Tz::Japan)),
+            reminders: Arc::new(Mutex::new(
+                vec![Reminder::before_minutes(5)].into_iter().collect(),
+            )),
+            reminds_random_kaisan: Arc::new(AtomicBool::new(false)),
+        }
+    }
+
+    pub fn set_current_time(&self, time: DateTime<Utc>) {
+        let _ = self.current_time_tx.broadcast(time);
+    }
+
+    pub async fn wait_for_message<F>(&self, f: F)
+    where
+        F: Fn(&Message) -> bool,
+    {
+        loop {
+            self.message_sent.notified().await;
+            let messages = self.sent_messages.lock().await.clone();
+            if messages.into_iter().find(&f).is_some() {
+                break;
+            }
         }
     }
 }
@@ -121,6 +150,7 @@ impl ChannelContext for MockContext {
 
     async fn message(&self, message: Message) -> Result<()> {
         self.sent_messages.lock().await.push(message);
+        self.message_sent.notify();
         Ok(())
     }
 }
@@ -149,9 +179,23 @@ impl RandomContext for MockContext {
     }
 }
 
+#[async_trait::async_trait]
 impl TimeContext for MockContext {
     fn current_time(&self) -> DateTime<Utc> {
-        self.current_time
+        *self.current_time_rx.borrow()
+    }
+
+    async fn delay_until(&self, time: DateTime<Utc>) {
+        if self.current_time() >= time {
+            return;
+        }
+
+        let mut rx = self.current_time_rx.clone();
+        while let Some(new_time) = rx.recv().await {
+            if new_time >= time {
+                return;
+            }
+        }
     }
 }
 
@@ -174,5 +218,27 @@ impl SettingContext for MockContext {
 
     async fn requires_permission(&self) -> Result<bool> {
         Ok(self.requires_permission.load(Ordering::SeqCst))
+    }
+
+    async fn reminders(&self) -> Result<HashSet<Reminder>> {
+        Ok(self.reminders.lock().await.clone())
+    }
+
+    async fn add_reminder(&self, reminder: Reminder) -> Result<bool> {
+        Ok(self.reminders.lock().await.insert(reminder))
+    }
+
+    async fn remove_reminder(&self, reminder: Reminder) -> Result<bool> {
+        Ok(self.reminders.lock().await.remove(&reminder))
+    }
+
+    async fn set_reminds_random_kaisan(&self, reminds_random_kaisan: bool) -> Result<()> {
+        self.reminds_random_kaisan
+            .store(reminds_random_kaisan, Ordering::SeqCst);
+        Ok(())
+    }
+
+    async fn reminds_random_kaisan(&self) -> Result<bool> {
+        Ok(self.reminds_random_kaisan.load(Ordering::SeqCst))
     }
 }

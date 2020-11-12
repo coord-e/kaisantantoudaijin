@@ -1,8 +1,9 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 use std::sync::Arc;
 
 use crate::error::{Error, Result};
-use crate::model::command::Command;
+use crate::model::{command::Command, reminder::Reminder};
 use crate::use_case;
 
 use anyhow::Context as _;
@@ -89,6 +90,61 @@ impl Context {
             .await
             .context("cannot write to redis")?;
         Ok(())
+    }
+
+    async fn redis_set_members<T: Eq + Hash + FromRedisValue>(
+        &self,
+        key: &str,
+    ) -> Result<HashSet<T>> {
+        let r = self
+            .redis
+            .lock()
+            .await
+            .smembers(self.redis_key(key))
+            .await
+            .context("cannot read from redis")?;
+        Ok(r)
+    }
+
+    async fn redis_set_add<T: ToRedisArgs + Send + Sync>(
+        &self,
+        key: &str,
+        value: T,
+    ) -> Result<bool> {
+        let n: i32 = self
+            .redis
+            .lock()
+            .await
+            .sadd(self.redis_key(key), value)
+            .await
+            .context("cannot write to redis")?;
+        Ok(n != 0)
+    }
+
+    async fn redis_set_remove<T: ToRedisArgs + Send + Sync>(
+        &self,
+        key: &str,
+        value: T,
+    ) -> Result<bool> {
+        let n: i32 = self
+            .redis
+            .lock()
+            .await
+            .srem(self.redis_key(key), value)
+            .await
+            .context("cannot write to redis")?;
+        Ok(n != 0)
+    }
+
+    async fn redis_flag_get(&self, key: &str, default: bool) -> Result<bool> {
+        Ok(match self.redis_get::<u32>(key).await? {
+            None => default,
+            Some(r) => r != 0,
+        })
+    }
+
+    async fn redis_flag_set(&self, key: &str, flag: bool) -> Result<()> {
+        self.redis_set(key, flag as u32).await
     }
 }
 
@@ -184,9 +240,17 @@ impl RandomContext for Context {
     }
 }
 
+#[async_trait::async_trait]
 impl TimeContext for Context {
     fn current_time(&self) -> DateTime<Utc> {
         Utc::now()
+    }
+
+    async fn delay_until(&self, time: DateTime<Utc>) {
+        let now = self.current_time();
+        if let Ok(duration) = (time - now).to_std() {
+            tokio::time::delay_for(duration).await;
+        }
     }
 }
 
@@ -204,15 +268,33 @@ impl SettingContext for Context {
     }
 
     async fn set_requires_permission(&self, requires_permission: bool) -> Result<()> {
-        self.redis_set("requires_permission", requires_permission as u32)
+        self.redis_flag_set("requires_permission", requires_permission)
             .await
     }
 
     async fn requires_permission(&self) -> Result<bool> {
-        Ok(match self.redis_get::<u32>("requires_permission").await? {
-            None => true,
-            Some(r) => r != 0,
-        })
+        self.redis_flag_get("requires_permission", true).await
+    }
+
+    async fn reminders(&self) -> Result<HashSet<Reminder>> {
+        self.redis_set_members("reminders").await
+    }
+
+    async fn add_reminder(&self, reminder: Reminder) -> Result<bool> {
+        self.redis_set_add("reminders", reminder).await
+    }
+
+    async fn remove_reminder(&self, reminder: Reminder) -> Result<bool> {
+        self.redis_set_remove("reminders", reminder).await
+    }
+
+    async fn reminds_random_kaisan(&self) -> Result<bool> {
+        self.redis_flag_get("reminds_random_kaisan", false).await
+    }
+
+    async fn set_reminds_random_kaisan(&self, reminds_random_kaisan: bool) -> Result<()> {
+        self.redis_flag_set("reminds_random_kaisan", reminds_random_kaisan)
+            .await
     }
 }
 
@@ -268,6 +350,11 @@ impl Context {
             Command::TimeZone(tz) => use_case::SetTimeZone::set_timezone(self, tz).await,
             Command::RequirePermission(b) => {
                 use_case::SetRequiresPermission::set_requires_permission(self, b).await
+            }
+            Command::AddReminder(r) => use_case::AddReminder::add_reminder(self, r).await,
+            Command::RemoveReminder(r) => use_case::RemoveReminder::remove_reminder(self, r).await,
+            Command::RemindRandomKaisan(b) => {
+                use_case::SetRemindsRandomKaisan::set_reminds_random_kaisan(self, b).await
             }
             Command::Kaisan {
                 kaisanee,
