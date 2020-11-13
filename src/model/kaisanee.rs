@@ -1,6 +1,6 @@
-use std::fmt::{self, Display};
+use crate::say::{fmt, IntoIteratorSayExt, Say};
 
-use serenity::model::{id::UserId, misc::Mentionable};
+use serenity::model::id::UserId;
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum KaisaneeSpecifier {
@@ -25,22 +25,12 @@ impl Default for KaisaneeSpecifier {
     }
 }
 
-impl Display for KaisaneeSpecifier {
+impl Say for KaisaneeSpecifier {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             KaisaneeSpecifier::Me => f.write_str("あなた"),
             KaisaneeSpecifier::All => f.write_str("全員"),
-            KaisaneeSpecifier::Users(ids) => {
-                if let Some(id) = ids.first() {
-                    write!(f, "{}", id.mention())?;
-                }
-
-                for id in ids[1..].iter() {
-                    write!(f, ", {}", id.mention())?;
-                }
-
-                Ok(())
-            }
+            KaisaneeSpecifier::Users(ids) => ids.say_mentions_ref().fmt(f),
         }
     }
 }

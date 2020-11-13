@@ -1,3 +1,5 @@
+use crate::say::{fmt, Say};
+
 use chrono::Duration;
 use redis::{FromRedisValue, RedisResult, RedisWrite, ToRedisArgs, Value};
 
@@ -26,5 +28,11 @@ impl ToRedisArgs for Reminder {
 impl FromRedisValue for Reminder {
     fn from_redis_value(v: &Value) -> RedisResult<Self> {
         u32::from_redis_value(v).map(Reminder)
+    }
+}
+
+impl Say for Reminder {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        say!(f, "{}前", self.before_duration())
     }
 }

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::model::{command::ParseCommandError, reminder::Reminder};
+use crate::say::{fmt, Say};
 
 use chrono::{DateTime, Utc};
 use serenity::model::permissions::Permissions;
@@ -32,6 +33,20 @@ pub enum Error {
 impl From<anyhow::Error> for Error {
     fn from(err: anyhow::Error) -> Error {
         Error::Other(Arc::new(err))
+    }
+}
+
+impl Say for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Error::NotInVoiceChannel => f.write_str("ボイスチャンネルに入った状態で使ってほしい"),
+            Error::InvalidCommand(_) => f.write_str("コマンドがわからない"),
+            Error::UnreachableTime { .. } => f.write_str("過去を変えることはできない"),
+            Error::InsufficientPermission(p) => write!(f, "{} の権限が必要です", p),
+            Error::NoSuchReminder(_) => f.write_str("そんなリマインダはない"),
+            Error::DuplicatedReminders(_) => f.write_str("それはすでにある"),
+            _ => f.write_str("ダメそう"),
+        }
     }
 }
 

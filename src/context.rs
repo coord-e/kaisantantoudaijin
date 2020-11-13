@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use crate::error::{Error, Result};
 use crate::model::{command::Command, reminder::Reminder};
+use crate::say::SayExt;
 use crate::use_case;
 
 use anyhow::Context as _;
@@ -208,9 +209,10 @@ impl ChannelContext for Context {
     }
 
     async fn message(&self, message: crate::model::message::Message) -> Result<()> {
-        debug!("send message: {}", message);
+        let display = message.display_say();
+        debug!("send message: {}", display);
         self.channel_id
-            .say(&self.http, message)
+            .say(&self.http, display)
             .await
             .context("cannot create a message")?;
         Ok(())

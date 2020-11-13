@@ -3,7 +3,10 @@ use crate::context::{
 };
 use crate::error::{Error, Result};
 use crate::model::{
-    command::TimeRangeSpecifier, kaisanee::KaisaneeSpecifier, message::Message, reminder::Reminder,
+    command::TimeRangeSpecifier,
+    kaisanee::KaisaneeSpecifier,
+    message::{CalculatedDateTime, Message},
+    reminder::Reminder,
 };
 
 use chrono::{DateTime, Duration, Utc};
@@ -62,10 +65,13 @@ pub trait ScheduleKaisan:
                 }
 
                 self.message(Message::Scheduled {
-                    spec: time_range,
+                    calculated_time: CalculatedDateTime {
+                        time: time.with_timezone(&tz),
+                        now: now.with_timezone(&tz),
+                        is_random: false,
+                        spec,
+                    },
                     kaisanee: kaisanee.clone(),
-                    time: time.with_timezone(&tz),
-                    now: now.with_timezone(&tz),
                 })
                 .await?;
                 (time, false)
@@ -85,10 +91,13 @@ pub trait ScheduleKaisan:
                 let time = now + random_duration;
 
                 self.message(Message::Scheduled {
-                    spec: time_range,
+                    calculated_time: CalculatedDateTime {
+                        time: by.with_timezone(&tz),
+                        now: now.with_timezone(&tz),
+                        is_random: true,
+                        spec,
+                    },
                     kaisanee: kaisanee.clone(),
-                    time: by.with_timezone(&tz),
-                    now: now.with_timezone(&tz),
                 })
                 .await?;
                 (time, true)
