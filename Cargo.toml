@@ -18,7 +18,7 @@ rand = { version = "0.7", features = ["small_rng"] }
 futures = "0.3"
 peg = "0.6"
 async-trait = "0.1"
-redis = "0.17"
+redis = { version = "0.21", default-features = false, features = ["aio", "tokio-comp"] }
 
 [dev-dependencies]
 lazy_static = "1.4"
