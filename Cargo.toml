@@ -5,7 +5,7 @@ authors = ["coord.e <me@coord-e.com>"]
 edition = "2021"
 
 [dependencies]
-serenity = { version = "0.9", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "cache"] }
+serenity = { version = "0.10", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "cache"] }
 tokio = { version = "1", default-features = false, features = ["macros", "rt-multi-thread", "time"] }
 chrono = "0.4"
 chrono-tz = "0.4"

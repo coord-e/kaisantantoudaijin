@@ -158,13 +158,15 @@ impl BotContext for Context {
 #[async_trait::async_trait]
 impl GuildContext for Context {
     async fn member_permissions(&self, user_id: UserId) -> Result<Permissions> {
-        match self
-            .cache
-            .guild_field(self.guild_id, |g| g.member_permissions(user_id))
-            .await
-        {
+        match self.cache.guild(self.guild_id).await {
             None => Err(Error::InaccessibleGuild),
-            Some(x) => Ok(x),
+            Some(guild) => {
+                let perms = guild
+                    .member_permissions((&self.cache, &*self.http), user_id)
+                    .await
+                    .context("cannot obtain member permissions")?;
+                Ok(perms)
+            }
         }
     }
 

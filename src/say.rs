@@ -170,7 +170,7 @@ pub trait IntoIteratorSayExt: IntoIterator + Sized {
         where
             T: Mentionable,
         {
-            x.mention()
+            x.mention().to_string()
         }
         self.into_iter().map(f as fn(&'a T) -> String).say_unwords()
     }
