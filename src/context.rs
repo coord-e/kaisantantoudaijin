@@ -240,7 +240,7 @@ impl MessageContext for Context {
 #[async_trait::async_trait]
 impl RandomContext for Context {
     async fn random_range(&self, from: i64, to: i64) -> i64 {
-        self.rng.lock().await.gen_range(from, to)
+        self.rng.lock().await.gen_range(from..to)
     }
 }
 
