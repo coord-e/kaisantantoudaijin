@@ -2,7 +2,7 @@
 name = "kaisantantoudaijin"
 version = "0.1.0"
 authors = ["coord.e <me@coord-e.com>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 serenity = { version = "0.9", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "cache"] }
