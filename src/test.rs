@@ -14,6 +14,7 @@ use crate::model::{message::Message, reminder::Reminder};
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 use futures::lock::Mutex;
+use once_cell::sync::Lazy;
 use serenity::model::{
     channel::ReactionType,
     id::{ChannelId, UserId},
@@ -30,20 +31,19 @@ pub const MOCK_AUTHOR_2: UserId = UserId(4081392650864611328);
 
 pub const FIXED_RANDOM: i64 = 12345;
 
-lazy_static::lazy_static! {
-    pub static ref MOCK_USERS: HashMap<UserId, Permissions> = {
-        let mut m = HashMap::new();
-        m.insert(MOCK_AUTHOR_1, Permissions::empty());
-        m.insert(MOCK_AUTHOR_2, Permissions::all());
-        m
-    };
-    pub static ref MOCK_VOICE_STATES: HashMap<UserId, ChannelId> = {
-        let mut m = HashMap::new();
-        m.insert(MOCK_AUTHOR_1, MOCK_VOICE_CHANNEL_ID);
-        m.insert(MOCK_AUTHOR_2, MOCK_VOICE_CHANNEL_ID);
-        m
-    };
-}
+pub static MOCK_USERS: Lazy<HashMap<UserId, Permissions>> = Lazy::new(|| {
+    let mut m = HashMap::new();
+    m.insert(MOCK_AUTHOR_1, Permissions::empty());
+    m.insert(MOCK_AUTHOR_2, Permissions::all());
+    m
+});
+
+pub static MOCK_VOICE_STATES: Lazy<HashMap<UserId, ChannelId>> = Lazy::new(|| {
+    let mut m = HashMap::new();
+    m.insert(MOCK_AUTHOR_1, MOCK_VOICE_CHANNEL_ID);
+    m.insert(MOCK_AUTHOR_2, MOCK_VOICE_CHANNEL_ID);
+    m
+});
 
 #[derive(Clone)]
 pub struct MockContext {
