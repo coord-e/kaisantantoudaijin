@@ -93,7 +93,7 @@ impl MockContext {
     }
 
     pub fn set_current_time(&self, time: DateTime<Utc>) {
-        let _ = self.current_time_tx.broadcast(time);
+        let _ = self.current_time_tx.send(time);
     }
 
     pub async fn wait_for_message<F>(&self, f: F)
@@ -150,7 +150,7 @@ impl ChannelContext for MockContext {
 
     async fn message(&self, message: Message) -> Result<()> {
         self.sent_messages.lock().await.push(message);
-        self.message_sent.notify();
+        self.message_sent.notify_one();
         Ok(())
     }
 }
@@ -190,8 +190,10 @@ impl TimeContext for MockContext {
             return;
         }
 
-        let mut rx = self.current_time_rx.clone();
-        while let Some(new_time) = rx.recv().await {
+        let rx = self.current_time_rx.clone();
+        let mut rx = tokio_stream::wrappers::WatchStream::new(rx);
+        use futures::StreamExt as _;
+        while let Some(new_time) = rx.next().await {
             if new_time >= time {
                 return;
             }

@@ -6,7 +6,7 @@ edition = "2021"
 
 [dependencies]
 serenity = { version = "0.9", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "cache"] }
-tokio = { version = "0.2", default-features = false, features = ["macros", "rt-threaded", "time"] }
+tokio = { version = "1", default-features = false, features = ["macros", "rt-multi-thread", "time"] }
 chrono = "0.4"
 chrono-tz = "0.4"
 structopt = "0.3"
@@ -22,3 +22,5 @@ redis = "0.17"
 
 [dev-dependencies]
 lazy_static = "1.4"
+tokio = { version = "1", features = ["sync"] }
+tokio-stream = { version = "0.1", features = ["sync"] }

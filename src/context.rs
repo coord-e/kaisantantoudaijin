@@ -251,7 +251,7 @@ impl TimeContext for Context {
     async fn delay_until(&self, time: DateTime<Utc>) {
         let now = self.current_time();
         if let Ok(duration) = (time - now).to_std() {
-            tokio::time::delay_for(duration).await;
+            tokio::time::sleep(duration).await;
         }
     }
 }
