@@ -5,7 +5,6 @@ use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
 use futures::lock::Mutex;
-use log::error;
 use serenity::client::{Client, EventHandler};
 use structopt::{clap::ArgGroup, StructOpt};
 
@@ -50,7 +49,7 @@ impl EventHandler for Handler {
         };
 
         if let Err(e) = ctx.handle_message(msg).await {
-            error!("error: {}", &e);
+            tracing::error!(error = %e, "error in handling message");
             let _ = ctx.message(Message::HandleError(e)).await;
         }
     }
@@ -58,7 +57,6 @@ impl EventHandler for Handler {
 
 #[derive(StructOpt)]
 #[structopt(group = ArgGroup::with_name("tokens").required(true).multiple(false))]
-/// You may want to set "KAISANDAIJIN_LOG" "KAISANDAIJIN_LOG_STYLE" to configure logger.
 struct Opt {
     #[structopt(
         long,
@@ -83,6 +81,8 @@ struct Opt {
         env = "KAISANDAIJIN_REDIS_PREFIX"
     )]
     redis_prefix: String,
+    #[structopt(short, long, env = "KAISANDAIJIN_LOG", default_value = "warn")]
+    log_filter: tracing_subscriber::filter::EnvFilter,
 }
 
 #[tokio::main]
@@ -102,10 +102,9 @@ async fn main() -> Result<()> {
     };
     let token = token.trim();
 
-    let env = env_logger::Env::new()
-        .filter("KAISANDAIJIN_LOG")
-        .write_style("KAISANDAIJIN_LOG_STYLE");
-    env_logger::try_init_from_env(env)?;
+    tracing_subscriber::fmt()
+        .with_env_filter(opt.log_filter)
+        .with_writer(std::io::stderr);
 
     let mut client = Client::builder(token)
         .event_handler(Handler {

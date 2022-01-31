@@ -10,8 +10,8 @@ tokio = { version = "1", default-features = false, features = ["macros", "rt-mul
 chrono = "0.4"
 chrono-tz = "0.4"
 structopt = "0.3"
-log = "0.4"
-env_logger = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 anyhow = "1.0"
 thiserror = "1.0"
 rand = { version = "0.8", features = ["small_rng"] }

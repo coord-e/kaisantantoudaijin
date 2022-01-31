@@ -11,7 +11,6 @@ use anyhow::Context as _;
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 use futures::lock::Mutex;
-use log::debug;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use redis::{AsyncCommands, FromRedisValue, ToRedisArgs};
 use serenity::{
@@ -211,10 +210,10 @@ impl ChannelContext for Context {
     }
 
     async fn message(&self, message: crate::model::message::Message) -> Result<()> {
-        let display = message.display_say();
-        debug!("send message: {}", display);
+        let message = message.display_say();
+        tracing::debug!(%message, "send message");
         self.channel_id
-            .say(&self.http, display)
+            .say(&self.http, message)
             .await
             .context("cannot create a message")?;
         Ok(())
@@ -346,7 +345,7 @@ impl Context {
             Some(s) => s.parse()?,
         };
 
-        debug!("parsed message as command: {:?}", command);
+        tracing::debug!(?command, "parsed message as command");
 
         match command {
             Command::Help => use_case::Help::help(self).await,

@@ -11,7 +11,6 @@ use crate::model::{
 
 use chrono::{DateTime, Duration, Utc};
 use futures::future;
-use log::{error, info};
 use serenity::model::{
     id::{ChannelId, UserId},
     permissions::Permissions,
@@ -106,7 +105,7 @@ pub trait ScheduleKaisan:
 
         let ctx = self.clone();
         schedule_kaisan_at(ctx.clone(), voice_channel_id, time, kaisanee.clone());
-        info!("scheduled kaisan for {:?} at {}", kaisanee, time);
+        tracing::info!(?kaisanee, %time, "scheduled kaisan");
 
         if !is_random || self.reminds_random_kaisan().await? {
             let reminders = self.reminders().await?;
@@ -123,7 +122,7 @@ pub trait ScheduleKaisan:
                     kaisanee.clone(),
                     reminder,
                 );
-                info!("scheduled remind for {:?} at {}", kaisanee, remind_time);
+                tracing::info!(?kaisanee, %remind_time, "scheduled remind");
             }
         }
 
@@ -155,7 +154,7 @@ fn schedule_kaisan_at<C: ScheduleKaisan + Send + Sync>(
         ctx.delay_until(time).await;
 
         if let Err(e) = kaisan(&ctx, voice_channel_id, &kaisanee).await {
-            error!("failed to kaisan: {}", &e);
+            tracing::error!(error = %e, "failed to kaisan");
             let _ = future::try_join(ctx.react('❌'), ctx.message(Message::KaisanError(e))).await;
         }
     });
@@ -172,7 +171,7 @@ fn schedule_reminder_at<C: ScheduleKaisan + Sync>(
         ctx.delay_until(remind_time).await;
 
         if let Err(e) = remind(&ctx, voice_channel_id, &kaisanee, reminder).await {
-            error!("failed to remind: {}", &e);
+            tracing::error!(error = %e, "failed to remind");
             let _ = future::try_join(ctx.react('❌'), ctx.message(Message::RemindError(e))).await;
         }
     });
@@ -187,7 +186,7 @@ async fn kaisan<C: ScheduleKaisan + Sync>(
 
     let mut futures = Vec::new();
     for user_id in &target_users {
-        info!("disconnect {:?}", user_id);
+        tracing::info!(?user_id, "disconnect");
         futures.push(ctx.disconnect_user(*user_id));
     }
 
