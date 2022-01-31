@@ -1,24 +1,49 @@
 [package]
 name = "kaisantantoudaijin"
 version = "0.1.0"
-authors = ["coord.e <me@coord-e.com>"]
+authors = ["coord_e <me@coord-e.com>"]
 edition = "2021"
 
 [dependencies]
-serenity = { version = "0.10", default-features = false, features = ["client", "gateway", "rustls_backend", "model", "cache"] }
-tokio = { version = "1", default-features = false, features = ["macros", "rt-multi-thread", "time"] }
+anyhow = "1.0"
+async-trait = "0.1"
 chrono = "0.4"
 chrono-tz = "0.4"
-structopt = "0.3"
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-anyhow = "1.0"
-thiserror = "1.0"
-rand = { version = "0.8", features = ["small_rng"] }
 futures = "0.3"
 peg = "0.8"
-async-trait = "0.1"
-redis = { version = "0.21", default-features = false, features = ["aio", "tokio-comp"] }
+rand = { version = "0.8", features = ["small_rng"] }
+structopt = "0.3"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dependencies.redis]
+version = "0.21"
+default-features = false
+features = [
+  "aio",
+  "tokio-comp",
+]
+
+[dependencies.serenity]
+version = "0.10"
+default-features = false
+features = [
+  "cache",
+  "client",
+  "gateway",
+  "model",
+  "rustls_backend",
+]
+
+[dependencies.tokio]
+version = "1"
+default-features = false
+features = [
+  "macros",
+  "rt-multi-thread",
+  "time",
+]
 
 [dev-dependencies]
 once_cell = "1"
