@@ -2,9 +2,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
+use clap::Parser;
 use futures::lock::Mutex;
 use serenity::client::{Client, EventHandler};
-use structopt::{clap::ArgGroup, StructOpt};
 
 use kaisantantoudaijin::{
     context::{ChannelContext, Context},
@@ -53,57 +53,57 @@ impl EventHandler for Handler {
     }
 }
 
-#[derive(StructOpt)]
-#[structopt(group = ArgGroup::with_name("tokens").required(true).multiple(false))]
-struct Opt {
-    #[structopt(
+#[derive(Parser)]
+#[clap(group = clap::ArgGroup::new("tokens").required(true).multiple(false))]
+struct Args {
+    #[clap(
         long,
         env = "KAISANDAIJIN_DISCORD_TOKEN",
         hide_env_values = true,
         group = "tokens"
     )]
     token: Option<String>,
-    #[structopt(
+    #[clap(
         long,
         env = "KAISANDAIJIN_DISCORD_TOKEN_FILE",
         parse(from_os_str),
         group = "tokens"
     )]
     token_file: Option<PathBuf>,
-    #[structopt(short, long, env = "KAISANDAIJIN_REDIS_URI")]
+    #[clap(short, long, env = "KAISANDAIJIN_REDIS_URI")]
     redis_uri: String,
-    #[structopt(
-        short = "p",
+    #[clap(
+        short = 'p',
         long,
         default_value = "kaisandaijin",
         env = "KAISANDAIJIN_REDIS_PREFIX"
     )]
     redis_prefix: String,
-    #[structopt(short, long, env = "KAISANDAIJIN_LOG", default_value = "warn")]
+    #[clap(short, long, env = "KAISANDAIJIN_LOG", default_value = "warn")]
     log_filter: tracing_subscriber::filter::EnvFilter,
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let opt = Opt::from_args();
+    let args = Args::parse();
 
-    let redis_client = redis::Client::open(opt.redis_uri)?;
+    let redis_client = redis::Client::open(args.redis_uri)?;
     let redis_conn = Arc::new(Mutex::new(redis_client.get_async_connection().await?));
 
-    let token = if let Some(token) = opt.token {
+    let token = if let Some(token) = args.token {
         token
     } else {
-        tokio::fs::read_to_string(opt.token_file.unwrap()).await?
+        tokio::fs::read_to_string(args.token_file.unwrap()).await?
     };
     let token = token.trim();
 
     tracing_subscriber::fmt()
-        .with_env_filter(opt.log_filter)
+        .with_env_filter(args.log_filter)
         .with_writer(std::io::stderr);
 
     let mut client = Client::builder(token)
         .event_handler(Handler {
-            redis_prefix: opt.redis_prefix,
+            redis_prefix: args.redis_prefix,
             redis: redis_conn,
         })
         .await
