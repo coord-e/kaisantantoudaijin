@@ -160,17 +160,11 @@ impl TimeSpecifier {
     }
 
     pub fn is_interested_in_time(&self) -> bool {
-        match self {
-            TimeSpecifier::At(_) => false,
-            _ => true,
-        }
+        !matches!(self, TimeSpecifier::At(_))
     }
 
     pub fn is_interested_in_duration(&self) -> bool {
-        match self {
-            TimeSpecifier::After(_) => false,
-            _ => true,
-        }
+        !matches!(self, TimeSpecifier::After(_))
     }
 }
 
