@@ -40,6 +40,7 @@ features = [
 version = "1"
 default-features = false
 features = [
+  "fs",
   "macros",
   "rt-multi-thread",
   "time",

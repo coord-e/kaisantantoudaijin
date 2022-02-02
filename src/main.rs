@@ -1,5 +1,3 @@
-use std::fs::File;
-use std::io::Read;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -95,10 +93,7 @@ async fn main() -> Result<()> {
     let token = if let Some(token) = opt.token {
         token
     } else {
-        let mut file = File::open(opt.token_file.unwrap())?;
-        let mut content = String::new();
-        file.read_to_string(&mut content)?;
-        content
+        tokio::fs::read_to_string(opt.token_file.unwrap()).await?
     };
     let token = token.trim();
 
