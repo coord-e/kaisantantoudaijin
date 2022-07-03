@@ -1,7 +1,7 @@
 version: "3.8"
 services:
   kaisantantoudaijin:
-    build: .
+    image: ghcr.io/coord-e/kaisantantoudaijin:latest
     depends_on:
       - redis
     environment:
