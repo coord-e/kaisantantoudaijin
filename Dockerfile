@@ -6,3 +6,4 @@ FROM $BASE_IMAGE
 ARG BIN_DIR
 ARG TARGETARCH
 COPY $BIN_DIR/$TARGETARCH/kaisantantoudaijin /usr/bin/kaisantantoudaijin
+CMD ["/usr/bin/kaisantantoudaijin"]
