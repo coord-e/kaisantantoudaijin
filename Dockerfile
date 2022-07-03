@@ -1,19 +1,8 @@
-FROM rust:slim-buster
+# syntax=docker.io/docker/dockerfile:1
 
-WORKDIR /build
+ARG BASE_IMAGE
+FROM $BASE_IMAGE
 
-RUN rustup default nightly
-RUN rustup target add x86_64-unknown-linux-musl
-
-RUN apt-get update -y
-RUN apt-get install -y musl-tools
-
-COPY . /build/
-RUN cargo build --release --target=x86_64-unknown-linux-musl
-
-
-FROM alpine
-
-COPY --from=0 /build/target/x86_64-unknown-linux-musl/release/kaisantantoudaijin /usr/bin/kaisantantoudaijin
-
-CMD ["/usr/bin/kaisantantoudaijin"]
+ARG BIN_DIR
+ARG TARGETARCH
+COPY $BIN_DIR/$TARGETARCH/kaisantantoudaijin /usr/bin/kaisantantoudaijin
