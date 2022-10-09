@@ -5,14 +5,14 @@ name: CI
 jobs:
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     strategy:
       matrix:
         target:
           - x86_64-unknown-linux-gnu
           - aarch64-unknown-linux-gnu
     steps:
-      - uses: actions/checkout@master
+      - uses: actions/checkout@v3
       - uses: actions/cache@v2
         with:
           path: |
@@ -37,7 +37,7 @@ jobs:
           path: ./target/${{ matrix.target }}/release/kaisantantoudaijin
   fmt:
     name: Rustfmt
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v1
       - uses: actions-rs/cargo@v1
@@ -46,7 +46,7 @@ jobs:
           args: --all -- --check
   clippy:
     name: Clippy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v1
       - uses: actions-rs/clippy-check@v1
@@ -55,7 +55,7 @@ jobs:
           args: --all-features
   build_container_image:
     name: Build and push container images
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     needs: test
     if: github.ref == 'refs/heads/main'
     env:
