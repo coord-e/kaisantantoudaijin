@@ -39,13 +39,13 @@ jobs:
     name: Rustfmt
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v3
       - run: cargo fmt --all -- --check
   clippy:
     name: Clippy
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v3
       - run: cargo clippy -- -D warnings
   build_container_image:
     name: Build and push container images
