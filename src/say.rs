@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use chrono::Duration;
 use chrono_tz::Tz;
-use serenity::model::misc::Mentionable;
+use serenity::model::mention::Mentionable;
 
 pub trait Say {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result;
