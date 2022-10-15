@@ -28,7 +28,7 @@ jobs:
         with:
           platforms: arm64
         if: matrix.target == 'aarch64-unknown-linux-gnu'
-      - uses: docker://rust:1.58.1-slim-bullseye
+      - uses: docker://rust:1.64.0-slim-bullseye
         with:
           args: ./ci/build_and_test.bash ${{ matrix.target }} --release
       - uses: actions/upload-artifact@v3

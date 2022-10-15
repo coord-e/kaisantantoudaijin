@@ -137,7 +137,7 @@ impl<'a, T, U> SayJoined<'a, '_, T, U> {
     }
 }
 
-impl<'a, T, U> Say for SayJoined<'_, '_, T, U>
+impl<T, U> Say for SayJoined<'_, '_, T, U>
 where
     T: Iterator<Item = U> + Clone,
     U: Say,
