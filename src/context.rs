@@ -60,7 +60,6 @@ impl Context {
         match self
             .cache
             .guild_field(self.guild_id, |g| g.voice_states.clone())
-            .await
         {
             None => Err(Error::InaccessibleGuild),
             Some(x) => Ok(x),
@@ -157,7 +156,7 @@ impl BotContext for Context {
 #[async_trait::async_trait]
 impl GuildContext for Context {
     async fn member_permissions(&self, user_id: UserId) -> Result<Permissions> {
-        match self.cache.guild(self.guild_id).await {
+        match self.cache.guild(self.guild_id) {
             None => Err(Error::InaccessibleGuild),
             Some(guild) => {
                 let perms = guild
@@ -309,7 +308,7 @@ impl Context {
         redis: Arc<Mutex<redis::aio::Connection>>,
         message: &Message,
     ) -> Option<Context> {
-        let bot_id = cache.current_user_id().await;
+        let bot_id = cache.current_user_id();
 
         let guild_id = match message.guild_id {
             None => return None,

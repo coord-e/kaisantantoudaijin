@@ -4,7 +4,10 @@ use std::sync::Arc;
 use anyhow::{Context as _, Result};
 use clap::Parser;
 use futures::lock::Mutex;
-use serenity::client::{Client, EventHandler};
+use serenity::{
+    client::{Client, EventHandler},
+    model::gateway::GatewayIntents,
+};
 
 use kaisantantoudaijin::{
     context::{ChannelContext, Context},
@@ -102,7 +105,9 @@ async fn main() -> Result<()> {
         .with_writer(std::io::stderr)
         .init();
 
-    let mut client = Client::builder(token)
+    let intents =
+        GatewayIntents::MESSAGE_CONTENT | GatewayIntents::GUILD_MESSAGES | GatewayIntents::GUILDS;
+    let mut client = Client::builder(token, intents)
         .event_handler(Handler {
             redis_prefix: args.redis_prefix,
             redis: redis_conn,
