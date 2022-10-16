@@ -28,7 +28,7 @@ jobs:
         with:
           platforms: arm64
         if: matrix.target == 'aarch64-unknown-linux-gnu'
-      - uses: docker://rust:1.64.0-slim-bullseye
+      - uses: docker://rust:1.64.0-slim-bullseye # Make sure the Debian release is the same as or older than the base image specified in the Dockerfile
         with:
           args: ./ci/build_and_test.bash ${{ matrix.target }} --release
       - uses: actions/upload-artifact@v3
@@ -82,6 +82,4 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ env.IMAGE_REPOSITORY }}:latest,${{ env.IMAGE_REPOSITORY }}:${{ github.sha }}
-          build-args: |
-            BIN_DIR
-            BASE_IMAGE=docker.io/library/debian:bullseye-slim
+          build-args: BIN_DIR

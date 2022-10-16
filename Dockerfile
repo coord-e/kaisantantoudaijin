@@ -1,7 +1,6 @@
 # syntax=docker.io/docker/dockerfile:1
 
-ARG BASE_IMAGE
-FROM $BASE_IMAGE
+FROM gcr.io/distroless/cc-debian11:nonroot
 
 ARG BIN_DIR
 ARG TARGETARCH
