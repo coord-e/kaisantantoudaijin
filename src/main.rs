@@ -57,33 +57,24 @@ impl EventHandler for Handler {
 }
 
 #[derive(Parser)]
-#[clap(group = clap::ArgGroup::new("tokens").required(true).multiple(false))]
+#[command(group(clap::ArgGroup::new("tokens").required(true).multiple(false).args(["token", "token_file"])))]
 struct Args {
-    #[clap(
-        long,
-        env = "KAISANDAIJIN_DISCORD_TOKEN",
-        hide_env_values = true,
-        group = "tokens"
-    )]
+    #[arg(long, env = "KAISANDAIJIN_DISCORD_TOKEN", hide_env_values = true)]
     token: Option<String>,
-    #[clap(
-        long,
-        env = "KAISANDAIJIN_DISCORD_TOKEN_FILE",
-        parse(from_os_str),
-        group = "tokens"
-    )]
+    #[arg(long, env = "KAISANDAIJIN_DISCORD_TOKEN_FILE")]
     token_file: Option<PathBuf>,
-    #[clap(short, long, env = "KAISANDAIJIN_REDIS_URI")]
+    #[arg(short, long, env = "KAISANDAIJIN_REDIS_URI")]
     redis_uri: String,
-    #[clap(
+    #[arg(
         short = 'p',
         long,
         default_value = "kaisandaijin",
         env = "KAISANDAIJIN_REDIS_PREFIX"
     )]
     redis_prefix: String,
-    #[clap(short, long, env = "KAISANDAIJIN_LOG", default_value = "warn")]
-    log_filter: tracing_subscriber::filter::EnvFilter,
+    /// Specify log level filter, configured in conjunction with KAISANDAIJIN_LOG environment variable
+    #[arg(short, long)]
+    log_level: Option<tracing_subscriber::filter::LevelFilter>,
 }
 
 #[tokio::main]
@@ -100,8 +91,15 @@ async fn main() -> Result<()> {
     };
     let token = token.trim();
 
+    let env_filter = tracing_subscriber::EnvFilter::from_env("KAISANDAIJIN_LOG");
+    let env_filter = args
+        .log_level
+        .into_iter()
+        .fold(env_filter, |filter, level| {
+            filter.add_directive(level.into())
+        });
     tracing_subscriber::fmt()
-        .with_env_filter(args.log_filter)
+        .with_env_filter(env_filter)
         .with_writer(std::io::stderr)
         .init();
 
