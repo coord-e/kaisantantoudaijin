@@ -30,7 +30,7 @@ jobs:
         if: matrix.target == 'aarch64-unknown-linux-gnu'
       - uses: docker://rust:1.64.0-slim-bullseye # Make sure the Debian release is the same as or older than the base image specified in the Dockerfile
         with:
-          args: ./ci/build_and_test.bash ${{ matrix.target }} --release
+          args: ./ci/build_and_test.bash ${{ matrix.target }} --release --locked
       - uses: actions/upload-artifact@v3
         with:
           name: kaisantantoudaijin-${{ matrix.target }}
