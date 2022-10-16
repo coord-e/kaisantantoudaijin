@@ -54,6 +54,14 @@ impl EventHandler for Handler {
             let _ = ctx.message(Message::HandleError(e)).await;
         }
     }
+
+    async fn cache_ready(
+        &self,
+        _ctx: serenity::client::Context,
+        guild_ids: Vec<serenity::model::id::GuildId>,
+    ) {
+        tracing::info!(?guild_ids, "cache is ready");
+    }
 }
 
 #[derive(Parser)]
