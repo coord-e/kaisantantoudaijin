@@ -8,7 +8,7 @@ edition = "2021"
 anyhow = "1.0"
 async-trait = "0.1"
 chrono = "0.4"
-chrono-tz = "0.4"
+chrono-tz = "0.6"
 clap = { version = "3", features = ["derive", "env"] }
 futures = "0.3"
 peg = "0.8"
