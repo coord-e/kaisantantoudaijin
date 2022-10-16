@@ -103,8 +103,14 @@ async fn main() -> Result<()> {
         .with_writer(std::io::stderr)
         .init();
 
-    let intents =
-        GatewayIntents::MESSAGE_CONTENT | GatewayIntents::GUILD_MESSAGES | GatewayIntents::GUILDS;
+    let intents = [
+        GatewayIntents::GUILDS,
+        GatewayIntents::GUILD_MESSAGES,
+        GatewayIntents::GUILD_VOICE_STATES,
+        GatewayIntents::MESSAGE_CONTENT,
+    ]
+    .into_iter()
+    .collect();
     let mut client = Client::builder(token, intents)
         .event_handler(Handler {
             redis_prefix: args.redis_prefix,
