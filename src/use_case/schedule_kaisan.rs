@@ -285,7 +285,7 @@ mod tests {
         ctx.schedule_kaisan(
             KaisaneeSpecifier::Me,
             TimeRangeSpecifier::At(TimeSpecifier::Exactly(
-                time.with_timezone(&FixedOffset::east(0)) + Duration::minutes(10),
+                time.with_timezone(&FixedOffset::east_opt(0).unwrap()) + Duration::minutes(10),
             )),
         )
         .await
@@ -306,7 +306,7 @@ mod tests {
         let now = Utc::now();
         let ctx = MockContext::with_current_time(now);
 
-        let now_with_tz = now.with_timezone(&FixedOffset::east(3600));
+        let now_with_tz = now.with_timezone(&FixedOffset::east_opt(3600).unwrap());
         let res = ctx
             .schedule_kaisan(
                 KaisaneeSpecifier::Me,
