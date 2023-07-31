@@ -25,7 +25,7 @@ features = [
 ]
 
 [dependencies.redis]
-version = "0.22"
+version = "0.23"
 default-features = false
 features = [
   "aio",
