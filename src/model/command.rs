@@ -82,6 +82,7 @@ peg::parser! {
 
     rule user() -> UserId
       = "<@!" n:$(['0'..='9']+) ">" { UserId(n.parse().unwrap()) }
+      / "<@" n:$(['0'..='9']+) ">" { UserId(n.parse().unwrap()) }
 
     rule users() -> Vec<UserId>
       = l:user() ** _ {? if l.is_empty() { Err("non-empty list of users") } else { Ok(l) } }
