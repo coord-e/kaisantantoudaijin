@@ -9,6 +9,7 @@ anyhow = "1.0"
 async-trait = "0.1"
 chrono-tz = "0.9"
 clap = { version = "4", features = ["derive", "env"] }
+deadpool-redis = "0.15.1"
 futures = "0.3"
 peg = "0.8"
 rand = { version = "0.8", features = ["small_rng"] }
