@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
 use clap::Parser;
-use futures::lock::Mutex;
 use serenity::{
     client::{Client, EventHandler},
     model::gateway::GatewayIntents,
@@ -16,7 +15,7 @@ use kaisantantoudaijin::{
 
 struct Handler {
     redis_prefix: String,
-    redis: Arc<Mutex<redis::aio::MultiplexedConnection>>,
+    redis: deadpool_redis::Pool,
 }
 
 #[async_trait::async_trait]
@@ -30,11 +29,20 @@ impl EventHandler for Handler {
             return;
         }
 
+        let redis_conn = match self.redis.get().await {
+            Ok(x) => x,
+            Err(e) => {
+                tracing::error!("error in getting redis connection: {:#}", e);
+                let _ = msg.channel_id.say(&ctx.http, "エラーが発生しました").await;
+                return;
+            }
+        };
+
         let ctx = match Context::new(
             Arc::clone(&ctx.http),
             Arc::clone(&ctx.cache),
             self.redis_prefix.clone(),
-            Arc::clone(&self.redis),
+            redis_conn,
             &msg,
         )
         .await
@@ -89,10 +97,8 @@ struct Args {
 async fn main() -> Result<()> {
     let args = Args::parse();
 
-    let redis_client = redis::Client::open(args.redis_uri)?;
-    let redis_conn = Arc::new(Mutex::new(
-        redis_client.get_multiplexed_async_connection().await?,
-    ));
+    let redis = deadpool_redis::Config::from_url(args.redis_uri)
+        .create_pool(Some(deadpool_redis::Runtime::Tokio1))?;
 
     let token = if let Some(token) = args.token {
         token
@@ -124,7 +130,7 @@ async fn main() -> Result<()> {
     let mut client = Client::builder(token, intents)
         .event_handler(Handler {
             redis_prefix: args.redis_prefix,
-            redis: redis_conn,
+            redis,
         })
         .await
         .context("Failed to create client")?;
