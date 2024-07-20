@@ -55,7 +55,13 @@ pub trait ScheduleKaisan:
                 return kaisan(self, voice_channel_id, &kaisanee).await;
             }
             TimeRangeSpecifier::At(spec) => {
-                let time = spec.calculate_time(now, tz);
+                let Some(time) = spec.calculate_time(now, tz) else {
+                    return Err(Error::InvalidTime {
+                        specifier: spec,
+                        at: now,
+                        timezone: tz,
+                    });
+                };
                 if time < now {
                     return Err(Error::UnreachableTime {
                         specified: time,
@@ -76,7 +82,13 @@ pub trait ScheduleKaisan:
                 (time, false)
             }
             TimeRangeSpecifier::By(spec) => {
-                let by = spec.calculate_time(now, tz);
+                let Some(by) = spec.calculate_time(now, tz) else {
+                    return Err(Error::InvalidTime {
+                        specifier: spec,
+                        at: now,
+                        timezone: tz,
+                    });
+                };
                 if by < now {
                     return Err(Error::UnreachableTime {
                         specified: by,
@@ -285,7 +297,7 @@ mod tests {
         ctx.schedule_kaisan(
             KaisaneeSpecifier::Me,
             TimeRangeSpecifier::At(TimeSpecifier::Exactly(
-                time.with_timezone(&FixedOffset::east(0)) + Duration::minutes(10),
+                time.with_timezone(&FixedOffset::east_opt(0).unwrap()) + Duration::minutes(10),
             )),
         )
         .await
@@ -306,7 +318,7 @@ mod tests {
         let now = Utc::now();
         let ctx = MockContext::with_current_time(now);
 
-        let now_with_tz = now.with_timezone(&FixedOffset::east(3600));
+        let now_with_tz = now.with_timezone(&FixedOffset::east_opt(3600).unwrap());
         let res = ctx
             .schedule_kaisan(
                 KaisaneeSpecifier::Me,

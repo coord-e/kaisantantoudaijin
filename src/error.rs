@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
-use crate::model::{command::ParseCommandError, reminder::Reminder};
+use crate::model::{command::ParseCommandError, reminder::Reminder, time::TimeSpecifier};
 use crate::say::{fmt, Say};
 
 use chrono::{DateTime, Utc};
+use chrono_tz::Tz;
 use serenity::model::permissions::Permissions;
 use thiserror::Error;
 
@@ -21,6 +22,12 @@ pub enum Error {
     UnreachableTime {
         specified: DateTime<Utc>,
         at: DateTime<Utc>,
+    },
+    #[error("invalid time {specifier:?} at {at} in {timezone}")]
+    InvalidTime {
+        specifier: TimeSpecifier,
+        at: DateTime<Utc>,
+        timezone: Tz,
     },
     #[error("no such reminder for {}", .0.before_duration())]
     NoSuchReminder(Reminder),
@@ -42,6 +49,7 @@ impl Say for Error {
             Error::NotInVoiceChannel => f.write_str("ボイスチャンネルに入った状態で使ってほしい"),
             Error::InvalidCommand(_) => f.write_str("コマンドがわからない"),
             Error::UnreachableTime { .. } => f.write_str("過去を変えることはできない"),
+            Error::InvalidTime { .. } => f.write_str("そんな時刻はない"),
             Error::InsufficientPermission(p) => write!(f, "{} の権限が必要です", p),
             Error::NoSuchReminder(_) => f.write_str("そんなリマインダはない"),
             Error::DuplicatedReminders(_) => f.write_str("それはすでにある"),
