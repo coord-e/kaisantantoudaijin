@@ -401,8 +401,20 @@ mod tests {
     fn test_kaisanee_en() {
         assert_eq!(parser::kaisanee("All"), Ok(KaisaneeSpecifier::All));
         assert_eq!(parser::kaisanee("me"), Ok(KaisaneeSpecifier::Me));
+    }
+
+    #[test]
+    fn test_kaisanee_users() {
         assert_eq!(
             parser::kaisanee("<@!12345> <@!45678><@!99999>"),
+            Ok(KaisaneeSpecifier::Users(vec![
+                UserId(12345),
+                UserId(45678),
+                UserId(99999)
+            ]))
+        );
+        assert_eq!(
+            parser::kaisanee("<@12345><@45678><@99999>"),
             Ok(KaisaneeSpecifier::Users(vec![
                 UserId(12345),
                 UserId(45678),
