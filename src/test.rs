@@ -22,12 +22,12 @@ use serenity::model::{
 };
 use tokio::sync::{watch, Notify};
 
-pub const MOCK_BOT_ID: UserId = UserId(6455241911587596288);
-pub const MOCK_CHANNEL_ID: ChannelId = ChannelId(7933013268500803584);
-pub const MOCK_VOICE_CHANNEL_ID: ChannelId = ChannelId(8549307414562138112);
+pub const MOCK_BOT_ID: UserId = UserId::new(6455241911587596288);
+pub const MOCK_CHANNEL_ID: ChannelId = ChannelId::new(7933013268500803584);
+pub const MOCK_VOICE_CHANNEL_ID: ChannelId = ChannelId::new(8549307414562138112);
 
-pub const MOCK_AUTHOR_1: UserId = UserId(17308610930080528384);
-pub const MOCK_AUTHOR_2: UserId = UserId(4081392650864611328);
+pub const MOCK_AUTHOR_1: UserId = UserId::new(17308610930080528384);
+pub const MOCK_AUTHOR_2: UserId = UserId::new(4081392650864611328);
 
 pub const FIXED_RANDOM: i64 = 12345;
 
