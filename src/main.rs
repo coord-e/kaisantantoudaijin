@@ -50,7 +50,7 @@ impl EventHandler for Handler {
         };
 
         if let Err(e) = ctx.handle_message(msg).await {
-            tracing::error!(error = %e, "error in handling message");
+            tracing::error!("error in handling message: {:#}", e);
             let _ = ctx.message(Message::HandleError(e)).await;
         }
     }
