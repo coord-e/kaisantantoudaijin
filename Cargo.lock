@@ -1121,9 +1121,9 @@ dependencies = [
 
 [[package]]
 name = "redis"
-version = "0.22.3"
+version = "0.25.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa8455fa3621f6b41c514946de66ea0531f57ca017b2e6c7cc368035ea5b46df"
+checksum = "e0d7a6955c7511f60f3ba9e86c6d02b3c3f144f8c24b288d1f4e18074ab8bbec"
 dependencies = [
  "async-trait",
  "bytes 1.1.0",
