@@ -16,7 +16,7 @@ use redis::{AsyncCommands, FromRedisValue, ToRedisArgs};
 use serenity::{
     builder::EditMember,
     cache::Cache,
-    http::client::Http,
+    http::Http,
     model::{
         channel::{Message, ReactionType},
         id::{ChannelId, GuildId, MessageId, UserId},
@@ -57,17 +57,16 @@ pub struct Context {
 
 impl Context {
     async fn voice_states(&self) -> Result<HashMap<UserId, VoiceState>> {
-        match self
+        Ok(self
             .cache
-            .guild_field(self.guild_id, |g| g.voice_states.clone())
-        {
-            None => Err(Error::InaccessibleGuild),
-            Some(x) => Ok(x),
-        }
+            .guild(self.guild_id)
+            .ok_or(Error::InaccessibleGuild)?
+            .voice_states
+            .clone())
     }
 
     fn redis_key(&self, key: &str) -> String {
-        format!("{}:{}:{}", self.redis_prefix, self.guild_id.as_u64(), key)
+        format!("{}:{}:{}", self.redis_prefix, u64::from(self.guild_id), key)
     }
 
     async fn redis_get<T: FromRedisValue>(&self, key: &str) -> Result<Option<T>> {
@@ -156,15 +155,14 @@ impl BotContext for Context {
 #[async_trait::async_trait]
 impl GuildContext for Context {
     async fn member_permissions(&self, user_id: UserId) -> Result<Permissions> {
+        let member = self
+            .guild_id
+            .member((&self.cache, &*self.http), user_id)
+            .await
+            .context("cannot obtain member")?;
         match self.cache.guild(self.guild_id) {
             None => Err(Error::InaccessibleGuild),
-            Some(guild) => {
-                let perms = guild
-                    .member_permissions((&self.cache, &*self.http), user_id)
-                    .await
-                    .context("cannot obtain member permissions")?;
-                Ok(perms)
-            }
+            Some(guild) => Ok(guild.member_permissions(&member)),
         }
     }
 
@@ -194,8 +192,9 @@ impl GuildContext for Context {
     }
 
     async fn disconnect_user(&self, user_id: UserId) -> Result<()> {
+        let builder = EditMember::new().disconnect_member();
         self.guild_id
-            .edit_member(&self.http, user_id, EditMember::disconnect_member)
+            .edit_member(&self.http, user_id, builder)
             .await
             .context("cannot edit member for disconnection")?;
         Ok(())
@@ -212,7 +211,7 @@ impl ChannelContext for Context {
         let message = message.display_say();
         tracing::debug!(%message, "send message");
         self.channel_id
-            .say(&self.http, message)
+            .say(&self.http, message.to_string())
             .await
             .context("cannot create a message")?;
         Ok(())
@@ -308,7 +307,7 @@ impl Context {
         redis: Arc<Mutex<redis::aio::MultiplexedConnection>>,
         message: &Message,
     ) -> Option<Context> {
-        let bot_id = cache.current_user_id();
+        let bot_id = cache.current_user().id;
 
         let guild_id = match message.guild_id {
             None => return None,
