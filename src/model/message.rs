@@ -121,8 +121,13 @@ impl Say for CalculatedDateTime {
         } = *self;
 
         if spec.is_interested_in_time() {
-            if time.date() != now.date() {
-                write!(f, "{}/{} ", time.date().month(), time.date().day())?;
+            if time.date_naive() != now.date_naive() {
+                write!(
+                    f,
+                    "{}/{} ",
+                    time.date_naive().month(),
+                    time.date_naive().day()
+                )?;
             }
             if time.hour() != now.hour() {
                 write!(f, "{}時", time.hour())?;
