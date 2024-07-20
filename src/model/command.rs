@@ -82,6 +82,7 @@ peg::parser! {
 
     rule user() -> UserId
       = "<@!" n:$(['0'..='9']+) ">" { UserId(n.parse().unwrap()) }
+      / "<@" n:$(['0'..='9']+) ">" { UserId(n.parse().unwrap()) }
 
     rule users() -> Vec<UserId>
       = l:user() ** _ {? if l.is_empty() { Err("non-empty list of users") } else { Ok(l) } }
@@ -400,8 +401,20 @@ mod tests {
     fn test_kaisanee_en() {
         assert_eq!(parser::kaisanee("All"), Ok(KaisaneeSpecifier::All));
         assert_eq!(parser::kaisanee("me"), Ok(KaisaneeSpecifier::Me));
+    }
+
+    #[test]
+    fn test_kaisanee_users() {
         assert_eq!(
             parser::kaisanee("<@!12345> <@!45678><@!99999>"),
+            Ok(KaisaneeSpecifier::Users(vec![
+                UserId(12345),
+                UserId(45678),
+                UserId(99999)
+            ]))
+        );
+        assert_eq!(
+            parser::kaisanee("<@12345><@45678><@99999>"),
             Ok(KaisaneeSpecifier::Users(vec![
                 UserId(12345),
                 UserId(45678),
