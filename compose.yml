@@ -1,4 +1,3 @@
-version: "3.8"
 services:
   kaisantantoudaijin:
     image: ghcr.io/coord-e/kaisantantoudaijin:latest
@@ -8,7 +7,9 @@ services:
       KAISANDAIJIN_REDIS_URI: redis://redis/
       KAISANDAIJIN_DISCORD_TOKEN: ${KAISANDAIJIN_DISCORD_TOKEN:?}
   redis:
-    image: redis:6
-    command: redis-server --appendonly yes
+    image: redis:7
+    command: redis-server --save 60 1
     volumes:
-      - /data
+      - redis-data:/data
+volumes:
+  redis-data:
