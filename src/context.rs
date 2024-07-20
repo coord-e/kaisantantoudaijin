@@ -51,7 +51,7 @@ pub struct Context {
     channel_id: ChannelId,
     message_id: MessageId,
     redis_prefix: String,
-    redis: Arc<Mutex<redis::aio::Connection>>,
+    redis: Arc<Mutex<redis::aio::MultiplexedConnection>>,
     rng: Arc<Mutex<SmallRng>>,
 }
 
@@ -305,7 +305,7 @@ impl Context {
         http: Arc<Http>,
         cache: Arc<Cache>,
         redis_prefix: String,
-        redis: Arc<Mutex<redis::aio::Connection>>,
+        redis: Arc<Mutex<redis::aio::MultiplexedConnection>>,
         message: &Message,
     ) -> Option<Context> {
         let bot_id = cache.current_user_id();

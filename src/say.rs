@@ -179,10 +179,7 @@ pub trait IntoIteratorSayExt: IntoIterator + Sized {
         self.say_joined(" ")
     }
 
-    fn say_joined<'a, 'b>(
-        self,
-        separator: &'a str,
-    ) -> SayJoined<'a, 'b, Self::IntoIter, Self::Item> {
+    fn say_joined<'b>(self, separator: &str) -> SayJoined<'_, 'b, Self::IntoIter, Self::Item> {
         SayJoined {
             iter: self.into_iter(),
             separator,

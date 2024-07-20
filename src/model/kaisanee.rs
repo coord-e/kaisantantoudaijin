@@ -2,9 +2,10 @@ use crate::say::{fmt, IntoIteratorSayExt, Say};
 
 use serenity::model::id::UserId;
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Default)]
 pub enum KaisaneeSpecifier {
     Me,
+    #[default]
     All,
     Users(Vec<UserId>),
 }
@@ -16,12 +17,6 @@ impl KaisaneeSpecifier {
             KaisaneeSpecifier::All => true,
             KaisaneeSpecifier::Users(users) => users != &[user_id],
         }
-    }
-}
-
-impl Default for KaisaneeSpecifier {
-    fn default() -> Self {
-        KaisaneeSpecifier::All
     }
 }
 

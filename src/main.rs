@@ -16,7 +16,7 @@ use kaisantantoudaijin::{
 
 struct Handler {
     redis_prefix: String,
-    redis: Arc<Mutex<redis::aio::Connection>>,
+    redis: Arc<Mutex<redis::aio::MultiplexedConnection>>,
 }
 
 #[async_trait::async_trait]
@@ -90,7 +90,9 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     let redis_client = redis::Client::open(args.redis_uri)?;
-    let redis_conn = Arc::new(Mutex::new(redis_client.get_async_connection().await?));
+    let redis_conn = Arc::new(Mutex::new(
+        redis_client.get_multiplexed_async_connection().await?,
+    ));
 
     let token = if let Some(token) = args.token {
         token

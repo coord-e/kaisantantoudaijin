@@ -17,9 +17,9 @@ impl Reminder {
 }
 
 impl ToRedisArgs for Reminder {
-    fn write_redis_args<W: ?Sized>(&self, out: &mut W)
+    fn write_redis_args<W>(&self, out: &mut W)
     where
-        W: RedisWrite,
+        W: RedisWrite + ?Sized,
     {
         self.0.write_redis_args(out);
     }
