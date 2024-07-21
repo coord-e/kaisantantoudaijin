@@ -299,6 +299,12 @@ impl SettingContext for Context {
     }
 }
 
+fn strip_affix<'a, 'b>(content: &'a str, affix: &'b str) -> Option<&'a str> {
+    content
+        .strip_prefix(affix)
+        .or_else(|| content.strip_suffix(affix))
+}
+
 impl Context {
     pub async fn new(
         http: Arc<Http>,
@@ -329,10 +335,8 @@ impl Context {
     }
 
     fn extract_command<'a>(&self, content: &'a str) -> Option<&'a str> {
-        let my_mention = format!("<@!{}>", self.bot_id);
-        content
-            .strip_prefix(&my_mention)
-            .or_else(|| content.strip_suffix(&my_mention))
+        strip_affix(content, &format!("<@{}>", self.bot_id))
+            .or_else(|| strip_affix(content, &format!("<@!{}>", self.bot_id)))
             .or_else(|| content.strip_prefix("!kaisan"))
             .map(str::trim)
     }
