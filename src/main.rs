@@ -19,6 +19,7 @@ fn strip_affix<'a>(content: &'a str, affix: &str) -> Option<&'a str> {
 }
 
 struct Handler {
+    command_prefix: String,
     redis_prefix: String,
     redis: deadpool_redis::Pool,
 }
@@ -37,7 +38,7 @@ impl EventHandler for Handler {
         let bot_id = ctx.cache.current_user().id;
         let command = strip_affix(&msg.content, &format!("<@{}>", bot_id))
             .or_else(|| strip_affix(&msg.content, &format!("<@!{}>", bot_id)))
-            .or_else(|| msg.content.strip_prefix("!kaisan"))
+            .or_else(|| msg.content.strip_prefix(&self.command_prefix))
             .map(str::trim);
 
         let Some(command) = command else {
@@ -87,6 +88,8 @@ impl EventHandler for Handler {
 #[derive(Parser)]
 #[command(group(clap::ArgGroup::new("tokens").required(true).multiple(false).args(["token", "token_file"])))]
 struct Args {
+    #[arg(long, default_value = "!kaisan", env = "KAISANDAIJIN_COMMAND_PREFIX")]
+    command_prefix: String,
     #[arg(long, env = "KAISANDAIJIN_DISCORD_TOKEN", hide_env_values = true)]
     token: Option<String>,
     #[arg(long, env = "KAISANDAIJIN_DISCORD_TOKEN_FILE")]
@@ -141,6 +144,7 @@ async fn main() -> Result<()> {
     .collect();
     let mut client = Client::builder(token, intents)
         .event_handler(Handler {
+            command_prefix: args.command_prefix,
             redis_prefix: args.redis_prefix,
             redis,
         })
