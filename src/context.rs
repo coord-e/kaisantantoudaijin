@@ -299,54 +299,9 @@ impl SettingContext for Context {
     }
 }
 
-fn strip_affix<'a, 'b>(content: &'a str, affix: &'b str) -> Option<&'a str> {
-    content
-        .strip_prefix(affix)
-        .or_else(|| content.strip_suffix(affix))
-}
-
 impl Context {
-    pub async fn new(
-        http: Arc<Http>,
-        cache: Arc<Cache>,
-        redis_prefix: String,
-        redis: deadpool_redis::Connection,
-        message: &Message,
-    ) -> Option<Context> {
-        let bot_id = cache.current_user().id;
-
-        let guild_id = match message.guild_id {
-            None => return None,
-            Some(id) => id,
-        };
-
-        Some(Context {
-            http,
-            cache,
-            bot_id,
-            guild_id,
-            author_id: message.author.id,
-            channel_id: message.channel_id,
-            message_id: message.id,
-            redis_prefix,
-            redis: Arc::new(Mutex::new(redis)),
-            rng: Arc::new(Mutex::new(SmallRng::from_entropy())),
-        })
-    }
-
-    fn extract_command<'a>(&self, content: &'a str) -> Option<&'a str> {
-        strip_affix(content, &format!("<@{}>", self.bot_id))
-            .or_else(|| strip_affix(content, &format!("<@!{}>", self.bot_id)))
-            .or_else(|| content.strip_prefix("!kaisan"))
-            .map(str::trim)
-    }
-
-    pub async fn handle_message(&self, message: Message) -> Result<()> {
-        let command = match self.extract_command(&message.content) {
-            None => return Ok(()),
-            Some(s) => s.parse()?,
-        };
-
+    pub async fn handle_command(&self, command: &str) -> Result<()> {
+        let command = command.parse()?;
         tracing::debug!(?command, "parsed message as command");
 
         match command {
@@ -366,5 +321,72 @@ impl Context {
                 time_range,
             } => use_case::ScheduleKaisan::schedule_kaisan(self, kaisanee, time_range).await,
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct ContextBuilder {
+    http: Arc<Http>,
+    cache: Arc<Cache>,
+    bot_id: UserId,
+    guild_id: Option<GuildId>,
+    author_id: Option<UserId>,
+    channel_id: Option<ChannelId>,
+    message_id: Option<MessageId>,
+    redis_prefix: Option<String>,
+    redis_conn: Option<Arc<Mutex<deadpool_redis::Connection>>>,
+}
+
+impl ContextBuilder {
+    pub fn with_serenity(ctx: &serenity::client::Context) -> Self {
+        let bot_id = ctx.cache.current_user().id;
+        Self {
+            http: Arc::clone(&ctx.http),
+            cache: Arc::clone(&ctx.cache),
+            bot_id,
+            guild_id: None,
+            author_id: None,
+            channel_id: None,
+            message_id: None,
+            redis_prefix: None,
+            redis_conn: None,
+        }
+    }
+
+    pub fn redis_prefix(&mut self, prefix: String) -> &mut Self {
+        self.redis_prefix = Some(prefix);
+        self
+    }
+
+    pub fn redis_conn(&mut self, conn: deadpool_redis::Connection) -> &mut Self {
+        self.redis_conn = Some(Arc::new(Mutex::new(conn)));
+        self
+    }
+
+    pub fn guild_id(&mut self, guild_id: GuildId) -> &mut Self {
+        self.guild_id = Some(guild_id);
+        self
+    }
+
+    pub fn message(&mut self, message: &Message) -> &mut Self {
+        self.author_id = Some(message.author.id);
+        self.channel_id = Some(message.channel_id);
+        self.message_id = Some(message.id);
+        self
+    }
+
+    pub fn build(&self) -> Option<Context> {
+        Some(Context {
+            http: Arc::clone(&self.http),
+            cache: Arc::clone(&self.cache),
+            bot_id: self.bot_id,
+            guild_id: self.guild_id?,
+            author_id: self.author_id?,
+            channel_id: self.channel_id?,
+            message_id: self.message_id?,
+            redis_prefix: self.redis_prefix.clone()?,
+            redis: Arc::clone(self.redis_conn.as_ref()?),
+            rng: Arc::new(Mutex::new(SmallRng::from_entropy())),
+        })
     }
 }

@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
 use clap::Parser;
@@ -9,9 +8,15 @@ use serenity::{
 };
 
 use kaisantantoudaijin::{
-    context::{ChannelContext, Context},
+    context::{ChannelContext, ContextBuilder},
     model::message::Message,
 };
+
+fn strip_affix<'a>(content: &'a str, affix: &str) -> Option<&'a str> {
+    content
+        .strip_prefix(affix)
+        .or_else(|| content.strip_suffix(affix))
+}
 
 struct Handler {
     redis_prefix: String,
@@ -29,6 +34,24 @@ impl EventHandler for Handler {
             return;
         }
 
+        let bot_id = ctx.cache.current_user().id;
+        let command = strip_affix(&msg.content, &format!("<@{}>", bot_id))
+            .or_else(|| strip_affix(&msg.content, &format!("<@!{}>", bot_id)))
+            .or_else(|| msg.content.strip_prefix("!kaisan"))
+            .map(str::trim);
+
+        let Some(command) = command else {
+            return;
+        };
+
+        let Some(guild_id) = msg.guild_id else {
+            let _ = msg
+                .channel_id
+                .say(&ctx.http, "サーバー内で使ってください")
+                .await;
+            return;
+        };
+
         let redis_conn = match self.redis.get().await {
             Ok(x) => x,
             Err(e) => {
@@ -38,27 +61,16 @@ impl EventHandler for Handler {
             }
         };
 
-        let ctx = match Context::new(
-            Arc::clone(&ctx.http),
-            Arc::clone(&ctx.cache),
-            self.redis_prefix.clone(),
-            redis_conn,
-            &msg,
-        )
-        .await
-        {
-            Some(x) => x,
-            None => {
-                let _ = msg
-                    .channel_id
-                    .say(&ctx.http, "サーバー内で使ってください")
-                    .await;
-                return;
-            }
-        };
+        let ctx = ContextBuilder::with_serenity(&ctx)
+            .redis_prefix(self.redis_prefix.clone())
+            .redis_conn(redis_conn)
+            .guild_id(guild_id)
+            .message(&msg)
+            .build()
+            .unwrap();
 
-        if let Err(e) = ctx.handle_message(msg).await {
-            tracing::error!("error in handling message: {:#}", e);
+        if let Err(e) = ctx.handle_command(command).await {
+            tracing::error!("error in handling command: {:#}", e);
             let _ = ctx.message(Message::HandleError(e)).await;
         }
     }
