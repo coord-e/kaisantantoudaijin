@@ -61,11 +61,11 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - run: mkdir -p $BIN_DIR/{amd64,arm64}
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: kaisantantoudaijin-x86_64-unknown-linux-gnu
           path: ${{ env.BIN_DIR }}/amd64/
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: kaisantantoudaijin-aarch64-unknown-linux-gnu
           path: ${{ env.BIN_DIR }}/arm64/
