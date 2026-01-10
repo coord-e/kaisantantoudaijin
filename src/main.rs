@@ -9,6 +9,7 @@ use serenity::{
 
 use kaisantantoudaijin::{
     context::{ChannelContext, ContextBuilder},
+    database::RedisHandle,
     model::message::Message,
 };
 
@@ -62,9 +63,9 @@ impl EventHandler for Handler {
             }
         };
 
+        let db = RedisHandle::new(self.redis_prefix.clone(), guild_id, redis_conn);
         let ctx = ContextBuilder::with_serenity(&ctx)
-            .redis_prefix(self.redis_prefix.clone())
-            .redis_conn(redis_conn)
+            .db(db)
             .guild_id(guild_id)
             .message(&msg)
             .build()
