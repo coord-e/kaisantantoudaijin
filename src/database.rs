@@ -4,6 +4,9 @@ use std::hash::Hash;
 mod redis;
 pub use redis::RedisHandle;
 
+mod dynamodb;
+pub use dynamodb::DynamoDbHandle;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DatabaseValue {
     String(String),
@@ -76,4 +79,117 @@ pub trait DatabaseHandle {
     ) -> Result<bool, Self::Error>;
     async fn flag_get(&self, key: &str, default: bool) -> Result<bool, Self::Error>;
     async fn flag_set(&self, key: &str, flag: bool) -> Result<(), Self::Error>;
+}
+
+#[derive(Debug, Clone)]
+pub enum AnyDatabaseHandle {
+    Redis(RedisHandle),
+    DynamoDb(DynamoDbHandle),
+}
+
+impl From<RedisHandle> for AnyDatabaseHandle {
+    fn from(handle: RedisHandle) -> Self {
+        AnyDatabaseHandle::Redis(handle)
+    }
+}
+
+impl From<DynamoDbHandle> for AnyDatabaseHandle {
+    fn from(handle: DynamoDbHandle) -> Self {
+        AnyDatabaseHandle::DynamoDb(handle)
+    }
+}
+
+#[derive(thiserror::Error, Debug)]
+pub enum AnyDatabaseHandleError {
+    #[error("{0}")]
+    RedisError(#[from] <RedisHandle as DatabaseHandle>::Error),
+    #[error("{0}")]
+    DynamoDbError(#[from] <DynamoDbHandle as DatabaseHandle>::Error),
+}
+
+#[async_trait::async_trait]
+impl DatabaseHandle for AnyDatabaseHandle {
+    type Error = AnyDatabaseHandleError;
+
+    async fn get<T: TryFrom<DatabaseValue>>(&self, key: &str) -> Result<Option<T>, Self::Error> {
+        match self {
+            AnyDatabaseHandle::Redis(handle) => handle.get(key).await.map_err(Into::into),
+            AnyDatabaseHandle::DynamoDb(handle) => handle.get(key).await.map_err(Into::into),
+        }
+    }
+
+    async fn set<T: Into<DatabaseValue> + Send + Sync>(
+        &self,
+        key: &str,
+        value: T,
+    ) -> Result<(), Self::Error> {
+        match self {
+            AnyDatabaseHandle::Redis(handle) => handle.set(key, value).await.map_err(Into::into),
+            AnyDatabaseHandle::DynamoDb(handle) => handle.set(key, value).await.map_err(Into::into),
+        }
+    }
+
+    async fn set_members<T: Eq + Hash + TryFrom<DatabaseValue>>(
+        &self,
+        key: &str,
+    ) -> Result<HashSet<T>, Self::Error> {
+        match self {
+            AnyDatabaseHandle::Redis(handle) => handle.set_members(key).await.map_err(Into::into),
+            AnyDatabaseHandle::DynamoDb(handle) => {
+                handle.set_members(key).await.map_err(Into::into)
+            }
+        }
+    }
+
+    async fn set_add<T: Into<DatabaseValue> + Send + Sync>(
+        &self,
+        key: &str,
+        value: T,
+    ) -> Result<bool, Self::Error> {
+        match self {
+            AnyDatabaseHandle::Redis(handle) => {
+                handle.set_add(key, value).await.map_err(Into::into)
+            }
+            AnyDatabaseHandle::DynamoDb(handle) => {
+                handle.set_add(key, value).await.map_err(Into::into)
+            }
+        }
+    }
+
+    async fn set_remove<T: Into<DatabaseValue> + Send + Sync>(
+        &self,
+        key: &str,
+        value: T,
+    ) -> Result<bool, Self::Error> {
+        match self {
+            AnyDatabaseHandle::Redis(handle) => {
+                handle.set_remove(key, value).await.map_err(Into::into)
+            }
+            AnyDatabaseHandle::DynamoDb(handle) => {
+                handle.set_remove(key, value).await.map_err(Into::into)
+            }
+        }
+    }
+
+    async fn flag_get(&self, key: &str, default: bool) -> Result<bool, Self::Error> {
+        match self {
+            AnyDatabaseHandle::Redis(handle) => {
+                handle.flag_get(key, default).await.map_err(Into::into)
+            }
+            AnyDatabaseHandle::DynamoDb(handle) => {
+                handle.flag_get(key, default).await.map_err(Into::into)
+            }
+        }
+    }
+
+    async fn flag_set(&self, key: &str, flag: bool) -> Result<(), Self::Error> {
+        match self {
+            AnyDatabaseHandle::Redis(handle) => {
+                handle.flag_set(key, flag).await.map_err(Into::into)
+            }
+            AnyDatabaseHandle::DynamoDb(handle) => {
+                handle.flag_set(key, flag).await.map_err(Into::into)
+            }
+        }
+    }
 }
