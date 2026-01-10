@@ -7,6 +7,7 @@ macro_rules! sayln {
 }
 
 pub mod context;
+pub mod database;
 pub mod error;
 pub mod model;
 pub mod say;
